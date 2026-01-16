@@ -428,9 +428,7 @@ export default function Analytics() {
 
   const bottleId = useMemo(() => {
     if (!orgId) return null;
-    const resolved = BOTTLE_BY_ORG[orgId];
-    if (!resolved) throw new Error(`Org desconocida: ${orgId}`);
-    return resolved;
+    return BOTTLE_BY_ORG[orgId] || orgId;
   }, [orgId]);
 
   const [entries, setEntries] = useState([]);

@@ -354,31 +354,23 @@ export default function Events() {
     return () => unsub();
   }, []);
 
-  // ✅ Fijar bottleId SOLO por mapping para evitar mezcla
+  // ✅ Fijar bottleId por mapping SI existe, si no usar orgId como bottleId (botella personal)
   useEffect(() => {
     if (!authReady || !uid || !orgId) return;
 
-    const mapped = BOTTLE_ID_BY_ORG[orgId];
-    if (!mapped) {
-      setBottleId("");
-      setBootstrapInfo((s) => ({
-        ...s,
-        tried: [],
-        usedBottleId: "",
-        migCount: 0,
-        catCount: 0,
-        done: false,
-        note: `OrgId desconocida: ${orgId}`,
-      }));
-      return;
-    }
+    const mapped = BOTTLE_ID_BY_ORG[orgId] || orgId;
 
     setBottleId(mapped);
     setBootstrapInfo((s) => ({
-      ...s,
+    ...s,
       tried: [mapped],
       usedBottleId: mapped,
-      note: "BottleId por mapping orgId (fijo)",
+      migCount: 0,
+      catCount: 0,
+      done: false,
+      note: BOTTLE_ID_BY_ORG[orgId]
+      ? "BottleId por mapping orgId (fijo)"
+      : "BottleId directo (botella personal)",
     }));
   }, [authReady, uid, orgId]);
 
@@ -464,7 +456,9 @@ export default function Events() {
       return;
     }
 
-    const ok = window.confirm("Esto borrará el flag meta/migration (done=true) para volver a correr el bootstrap. ¿Continuar?");
+    const ok = window.confirm(
+      "Esto borrará el flag meta/migration (done=true) para volver a correr el bootstrap. ¿Continuar?"
+    );
     if (!ok) return;
 
     try {
@@ -631,12 +625,20 @@ export default function Events() {
       const hasAnyCategory = !catSnapCheck.empty;
 
       if (hasAnyCategory) {
-        setBootstrapInfo((s) => ({ ...s, done: true, note: "Meta migration ya estaba done=true (y sí hay categorías)" }));
+        setBootstrapInfo((s) => ({
+          ...s,
+          done: true,
+          note: "Meta migration ya estaba done=true (y sí hay categorías)",
+        }));
         setCatalogMode("full");
         return "full";
       }
 
-      setBootstrapInfo((s) => ({ ...s, done: false, note: "Meta estaba done=true pero NO hay categorías → re-sincronizando…" }));
+      setBootstrapInfo((s) => ({
+        ...s,
+        done: false,
+        note: "Meta estaba done=true pero NO hay categorías → re-sincronizando…",
+      }));
       // NO return → sigue a sync
     }
 
@@ -644,7 +646,7 @@ export default function Events() {
     setBootstrapInfo((s) => ({ ...s, migCount: movs.length }));
 
     // ✅ Si los movimientos NO traen campos de catálogo, NO bootstrap.
-    // Se mantiene el mismo UI mostrando una pseudo-categoría "Entradas recientes".
+    // ✅ FIX: solo manda a recent-only si NO puede editar.
     const sample = movs.slice(0, 80);
     const canBootstrapCatalogs = sample.some(movsHaveCatalogFields);
 
@@ -657,13 +659,24 @@ export default function Events() {
         note: "Skip bootstrap: movimientos sin categoria/subcategoria/concepto/cuenta.",
       });
 
-      setCatalogMode("recent-only");
+      if (!canEdit) {
+        setCatalogMode("recent-only");
+        setBootstrapInfo((s) => ({
+          ...s,
+          done: true,
+          note: "Modo solo-movimientos (viewer): se muestran entradas recientes.",
+        }));
+        return "recent-only";
+      }
+
+      // admin/editor: NO bloquear catálogos
+      setCatalogMode("full");
       setBootstrapInfo((s) => ({
         ...s,
         done: true,
-        note: "Modo solo-movimientos: no se crean catálogos. Se muestran entradas recientes.",
+        note: "Movimientos sin campos de catálogo, pero puedes crear catálogos (admin/editor).",
       }));
-      return "recent-only";
+      return "full";
     }
 
     if (movs.length === 0) {
@@ -817,7 +830,8 @@ export default function Events() {
 
     syncFromMigratedIfNeeded()
       .then(async (mode) => {
-        if (mode === "recent-only") {
+        // ✅ FIX: solo recent-only para viewers
+        if (!canEdit && mode === "recent-only") {
           setCategories([{ id: "__recent__", name: "Entradas recientes" }]);
           setSelectedCategoryId("__recent__");
           setSubCategories([]);
@@ -834,18 +848,18 @@ export default function Events() {
       })
       .catch((e) => setError(e?.message || String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgRefs]);
+  }, [orgRefs, canEdit]);
 
   // ✅ derivar lists desde allEntries (sin query compuesta)
   useEffect(() => {
-    if (catalogMode === "recent-only" || selectedCategoryId === "__recent__") {
+    if (!canEdit && (catalogMode === "recent-only" || selectedCategoryId === "__recent__")) {
       const copy = [...allEntries];
       copy.sort(sortByDateDesc);
       setEntriesForCategory(copy);
       return;
     }
 
-    if (!selectedCategoryId) {
+    if (!selectedCategoryId || selectedCategoryId === "__recent__") {
       setEntriesForCategory([]);
       return;
     }
@@ -853,14 +867,14 @@ export default function Events() {
     const filtered = allEntries.filter((e) => e.categoryId === selectedCategoryId);
     filtered.sort(sortByDateDesc);
     setEntriesForCategory(filtered);
-  }, [allEntries, selectedCategoryId, catalogMode]);
+  }, [allEntries, selectedCategoryId, catalogMode, canEdit]);
 
   useEffect(() => {
-    if (catalogMode === "recent-only") {
+    if (!canEdit && catalogMode === "recent-only") {
       setEntriesForSubCategory([]);
       return;
     }
-    if (!selectedCategoryId || !selectedSubCategoryId) {
+    if (!selectedCategoryId || selectedCategoryId === "__recent__" || !selectedSubCategoryId) {
       setEntriesForSubCategory([]);
       return;
     }
@@ -869,14 +883,14 @@ export default function Events() {
     );
     filtered.sort(sortByDateDesc);
     setEntriesForSubCategory(filtered);
-  }, [allEntries, selectedCategoryId, selectedSubCategoryId, catalogMode]);
+  }, [allEntries, selectedCategoryId, selectedSubCategoryId, catalogMode, canEdit]);
 
   useEffect(() => {
-    if (catalogMode === "recent-only") {
+    if (!canEdit && catalogMode === "recent-only") {
       setEntriesForConcept([]);
       return;
     }
-    if (!selectedCategoryId || !selectedSubCategoryId || !selectedConceptId) {
+    if (!selectedCategoryId || selectedCategoryId === "__recent__" || !selectedSubCategoryId || !selectedConceptId) {
       setEntriesForConcept([]);
       return;
     }
@@ -888,10 +902,10 @@ export default function Events() {
     );
     filtered.sort(sortByDateDesc);
     setEntriesForConcept(filtered);
-  }, [allEntries, selectedCategoryId, selectedSubCategoryId, selectedConceptId, catalogMode]);
+  }, [allEntries, selectedCategoryId, selectedSubCategoryId, selectedConceptId, catalogMode, canEdit]);
 
   useEffect(() => {
-    if (catalogMode === "recent-only") {
+    if (!canEdit && catalogMode === "recent-only") {
       setEntriesForBank([]);
       return;
     }
@@ -902,13 +916,13 @@ export default function Events() {
     const filtered = allEntries.filter((e) => e.bankAccountId === selectedBankAccountId);
     filtered.sort(sortByDateDesc);
     setEntriesForBank(filtered);
-  }, [allEntries, selectedBankAccountId, catalogMode]);
+  }, [allEntries, selectedBankAccountId, catalogMode, canEdit]);
 
   // Cascadas de selectors
   useEffect(() => {
-    if (catalogMode === "recent-only") return;
+    if (!canEdit && catalogMode === "recent-only") return;
 
-    if (!orgRefs || !selectedCategoryId) {
+    if (!orgRefs || !selectedCategoryId || selectedCategoryId === "__recent__") {
       setSubCategories([]);
       setSelectedSubCategoryId("");
       setConcepts([]);
@@ -926,12 +940,12 @@ export default function Events() {
     setEntriesForSubCategory([]);
     setEntriesForConcept([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategoryId, catalogMode]);
+  }, [selectedCategoryId, catalogMode, canEdit]);
 
   useEffect(() => {
-    if (catalogMode === "recent-only") return;
+    if (!canEdit && catalogMode === "recent-only") return;
 
-    if (!orgRefs || !selectedCategoryId || !selectedSubCategoryId) {
+    if (!orgRefs || !selectedCategoryId || selectedCategoryId === "__recent__" || !selectedSubCategoryId) {
       setConcepts([]);
       setSelectedConceptId("");
       setEntriesForConcept([]);
@@ -943,21 +957,18 @@ export default function Events() {
     setSelectedConceptId("");
     setEntriesForConcept([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubCategoryId, catalogMode]);
+  }, [selectedSubCategoryId, catalogMode, canEdit]);
 
   // CRUD
   async function onCreateCategory(e) {
+    e.preventDefault();
+
     if (!canEdit) {
-      e.preventDefault();
       setError("No tienes permisos para crear categorías (solo editor/admin).");
       return;
     }
 
-    if (catalogMode === "recent-only") {
-      setError("Esta organización está en modo solo-movimientos. No se crean categorías aquí.");
-      return;
-    }
-    e.preventDefault();
+    // ✅ FIX: no bloquear por recent-only si es admin/editor
     setError("");
     if (!orgRefs) return setError("No hay organización / bottleId / auth lista aún.");
     if (!name.trim()) return setError("El nombre de la categoría es obligatorio.");
@@ -997,20 +1008,17 @@ export default function Events() {
   }
 
   async function onCreateSubCategory(e) {
+    e.preventDefault();
+
     if (!canEdit) {
-      e.preventDefault();
       setError("No tienes permisos para crear sub-categorías (solo editor/admin).");
       return;
     }
 
-    if (catalogMode === "recent-only") {
-      setError("Esta organización está en modo solo-movimientos. No se manejan sub-categorías aquí.");
-      return;
-    }
-    e.preventDefault();
+    // ✅ FIX: no bloquear por recent-only si es admin/editor
     setError("");
     if (!orgRefs) return setError("No hay organización / bottleId / auth lista aún.");
-    if (!selectedCategoryId) return setError("Selecciona primero una categoría.");
+    if (!selectedCategoryId || selectedCategoryId === "__recent__") return setError("Selecciona primero una categoría.");
     if (!subName.trim()) return setError("El nombre de la sub-categoría es obligatorio.");
 
     try {
@@ -1030,7 +1038,7 @@ export default function Events() {
       setError("No tienes permisos para eliminar sub-categorías (solo editor/admin).");
       return;
     }
-    if (!orgRefs || !selectedCategoryId || !sc?.id) return;
+    if (!orgRefs || !selectedCategoryId || selectedCategoryId === "__recent__" || !sc?.id) return;
     const ok = window.confirm(`¿Eliminar la sub-categoría "${sc.name}"? (No borra entradas automáticamente)`);
     if (!ok) return;
 
@@ -1047,20 +1055,17 @@ export default function Events() {
   }
 
   async function onCreateConcept(e) {
+    e.preventDefault();
+
     if (!canEdit) {
-      e.preventDefault();
       setError("No tienes permisos para crear conceptos (solo editor/admin).");
       return;
     }
 
-    if (catalogMode === "recent-only") {
-      setError("Esta organización está en modo solo-movimientos. No se manejan conceptos aquí.");
-      return;
-    }
-    e.preventDefault();
+    // ✅ FIX: no bloquear por recent-only si es admin/editor
     setError("");
     if (!orgRefs) return setError("No hay organización / bottleId / auth lista aún.");
-    if (!selectedCategoryId) return setError("Selecciona primero una categoría.");
+    if (!selectedCategoryId || selectedCategoryId === "__recent__") return setError("Selecciona primero una categoría.");
     if (!selectedSubCategoryId) return setError("Selecciona primero una sub-categoría.");
     if (!conceptName.trim()) return setError("El nombre del concepto es obligatorio.");
 
@@ -1084,7 +1089,7 @@ export default function Events() {
       setError("No tienes permisos para eliminar conceptos (solo editor/admin).");
       return;
     }
-    if (!orgRefs || !selectedCategoryId || !selectedSubCategoryId || !cn?.id) return;
+    if (!orgRefs || !selectedCategoryId || selectedCategoryId === "__recent__" || !selectedSubCategoryId || !cn?.id) return;
     const ok = window.confirm(`¿Eliminar el concepto "${cn.name}"? (No borra entradas automáticamente)`);
     if (!ok) return;
 
@@ -1124,7 +1129,10 @@ export default function Events() {
   // ✅ agrupados y totales
   const groupedCategory = useMemo(() => groupEntries(entriesForCategory, groupCatBy), [entriesForCategory, groupCatBy]);
   const groupedSub = useMemo(() => groupEntries(entriesForSubCategory, groupSubBy), [entriesForSubCategory, groupSubBy]);
-  const groupedConcept = useMemo(() => groupEntries(entriesForConcept, groupConceptBy), [entriesForConcept, groupConceptBy]);
+  const groupedConcept = useMemo(
+    () => groupEntries(entriesForConcept, groupConceptBy),
+    [entriesForConcept, groupConceptBy]
+  );
   const groupedBank = useMemo(() => groupEntries(entriesForBank, groupBankBy), [entriesForBank, groupBankBy]);
 
   const totalsCategory = useMemo(() => totals(entriesForCategory), [entriesForCategory]);
@@ -1274,7 +1282,11 @@ export default function Events() {
 
             <div>
               <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
-              <select className="rounded-xl border px-3 py-2" value={groupCatBy} onChange={(e) => setGroupCatBy(e.target.value)}>
+              <select
+                className="rounded-xl border px-3 py-2"
+                value={groupCatBy}
+                onChange={(e) => setGroupCatBy(e.target.value)}
+              >
                 <option value="day">Día</option>
                 <option value="week">Semana</option>
                 <option value="month">Mes</option>
@@ -1415,7 +1427,11 @@ export default function Events() {
 
             <div>
               <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
-              <select className="rounded-xl border px-3 py-2" value={groupSubBy} onChange={(e) => setGroupSubBy(e.target.value)}>
+              <select
+                className="rounded-xl border px-3 py-2"
+                value={groupSubBy}
+                onChange={(e) => setGroupSubBy(e.target.value)}
+              >
                 <option value="day">Día</option>
                 <option value="week">Semana</option>
                 <option value="month">Mes</option>
@@ -1426,12 +1442,10 @@ export default function Events() {
 
           <div className="flex flex-wrap gap-4 text-sm mb-2">
             <div>
-              <b>Ingreso total:</b>{" "}
-              <span className="text-green-600">{totalsSub.ingreso.toLocaleString("es-MX")}</span>
+              <b>Ingreso total:</b> <span className="text-green-600">{totalsSub.ingreso.toLocaleString("es-MX")}</span>
             </div>
             <div>
-              <b>Gasto total:</b>{" "}
-              <span className="text-red-600">{totalsSub.gasto.toLocaleString("es-MX")}</span>
+              <b>Gasto total:</b> <span className="text-red-600">{totalsSub.gasto.toLocaleString("es-MX")}</span>
             </div>
             <div>
               <b>Neto:</b> <span className="font-semibold">{totalsSub.neto.toLocaleString("es-MX")}</span>
@@ -1640,13 +1654,13 @@ export default function Events() {
 
           <form
             onSubmit={async (e) => {
+              e.preventDefault();
+
               if (!canEdit) {
-                e.preventDefault();
                 setError("No tienes permisos para crear cuentas bancarias (solo editor/admin).");
                 return;
               }
 
-              e.preventDefault();
               setError("");
               if (!orgRefs) return setError("No hay organización / bottleId / auth lista aún.");
               if (!bankName.trim()) return setError("El nombre de la cuenta es obligatorio.");
@@ -1732,7 +1746,11 @@ export default function Events() {
 
             <div>
               <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
-              <select className="rounded-xl border px-3 py-2" value={groupBankBy} onChange={(e) => setGroupBankBy(e.target.value)}>
+              <select
+                className="rounded-xl border px-3 py-2"
+                value={groupBankBy}
+                onChange={(e) => setGroupBankBy(e.target.value)}
+              >
                 <option value="day">Día</option>
                 <option value="week">Semana</option>
                 <option value="month">Mes</option>

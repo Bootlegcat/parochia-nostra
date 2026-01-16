@@ -38,7 +38,7 @@ export default function Members() {
   // hooks siempre primero
   const bottleId = useMemo(() => {
     if (!orgId) return "";
-    return BOTTLE_ID_BY_ORG[orgId] || "";
+    return BOTTLE_ID_BY_ORG[orgId] || orgId; // ✅ mapping si existe, si no bottleId personal
   }, [orgId]);
 
   const refs = useMemo(() => {
@@ -265,7 +265,7 @@ export default function Members() {
   }
 
   // guards al final
-  if (!orgId) return <Navigate to="/home" replace />;
+  if (!orgId) return <Navigate to="/organizaciones" replace />; // ✅ ruta nueva
   if (!user) return <Navigate to="/" replace />;
   if (!bottleId) return <Navigate to="/organizaciones" replace />;
 
@@ -399,12 +399,16 @@ export default function Members() {
                 <option value="editor">editor</option>
                 <option value="admin">admin</option>
               </select>
-              <button className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50" disabled={adminBusy}>
+              <button
+                className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
+                disabled={adminBusy}
+              >
                 Crear invite
               </button>
             </form>
             <div className="text-xs text-slate-500 mt-2">
-              Nota: por seguridad, al hacer claim el usuario entra como <b>viewer</b>. Luego tú lo subes a editor/admin aquí.
+              Nota: por seguridad, al hacer claim el usuario entra como <b>viewer</b>. Luego tú lo
+              subes a editor/admin aquí.
             </div>
           </div>
 
@@ -509,7 +513,9 @@ export default function Members() {
                 </table>
               </div>
             )}
-            <div className="text-xs text-slate-500 mt-2">Si eliminas a alguien, pierde acceso inmediatamente.</div>
+            <div className="text-xs text-slate-500 mt-2">
+              Si eliminas a alguien, pierde acceso inmediatamente.
+            </div>
           </div>
         </div>
       )}

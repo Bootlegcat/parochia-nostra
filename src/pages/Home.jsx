@@ -76,7 +76,7 @@ function SubTile({ to, children }) {
 
 export default function Home() {
   const auth = getAuth();
-  const { orgId } = useParams(); // "iglesia" | "construyendo-lazos"
+  const { orgId } = useParams(); // "iglesia" | "construyendo-lazos" | bottleId personal
 
   async function onLogout() {
     try {
@@ -86,8 +86,8 @@ export default function Home() {
     }
   }
 
-  // Si entraste a /home (sin orgId), manda a selector central
-  if (!orgId) return <Navigate to="/home" replace />;
+  // ✅ Si no hay orgId, manda al selector central
+  if (!orgId) return <Navigate to="/organizaciones" replace />;
 
   return (
     <div className="min-h-screen p-4 md:p-6" style={{ background: COLORS.page }}>
@@ -130,36 +130,33 @@ export default function Home() {
               </span>
             </Tile>
 
-            {/* ✅ Eventos vuelve a ser hijo directo del grid (tamaño original) */}
             <Tile to={`/org/${orgId}/events`}>Eventos</Tile>
 
             <Tile to={`/org/${orgId}/analytics`}>Análisis</Tile>
           </div>
 
-          {/* ✅ Botón "Miembros" debajo de Eventos, discreto, sin afectar el grid */}
+          {/* Botón "Miembros" debajo de Eventos */}
           <div className="flex justify-center mt-2 md:mt-4 pb-12">
-            {/* en desktop esto queda del ancho de 1/3 del grid; en mobile ocupa todo */}
             <div className="w-full md:w-1/3 flex justify-center">
-              {/* 2/3 del ancho del “bloque” del medio */}
               <div className="w-2/3">
                 <SubTile to={`/org/${orgId}/members`}>Miembros</SubTile>
               </div>
             </div>
           </div>
 
-          {/* Cambiar organización (abajo-izquierda) */}
+          {/* ✅ Cambiar organización (ahora al selector real) */}
           <Link
-            to="/home"
+            to="/organizaciones"
             className="
               absolute left-4 bottom-3 text-white font-medium text-sm
               underline-offset-4 hover:underline transition
             "
-            title="Regresar a Iglesia / Construyendo Lazos"
+            title="Regresar a selector"
           >
             Cambiar organización
           </Link>
 
-          {/* Cerrar sesión (abajo-derecha) */}
+          {/* Cerrar sesión */}
           <button
             onClick={onLogout}
             className="

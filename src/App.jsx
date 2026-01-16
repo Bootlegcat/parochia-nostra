@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import OrgGate from "./components/OrgGate.jsx";
 
 import OrgSelect from "./pages/OrgSelect.jsx";
 import Home from "./pages/Home.jsx";
@@ -11,11 +12,8 @@ import Entries from "./pages/Entries.jsx";
 import Events from "./pages/Events.jsx";
 import Analytics from "./pages/Analytics.jsx";
 import Members from "./pages/Members.jsx";
-
-// ✅ NUEVO (lo migrado)
 import MovimientosPage from "./pages/MovimientosPage.jsx";
 
-/** Redirecciona rutas viejas (sin orgId) al selector de organización */
 function RedirectToOrgSelect() {
   return <Navigate to="/organizaciones" replace />;
 }
@@ -38,12 +36,24 @@ export default function App() {
           }
         />
 
+        {/* ✅ Alias: si alguien entra a /org directo, mándalo al selector */}
+        <Route
+          path="/org"
+          element={
+            <ProtectedRoute>
+              <RedirectToOrgSelect />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Home por organización */}
         <Route
           path="/org/:orgId/home"
           element={
             <ProtectedRoute>
-              <Home />
+              <OrgGate>
+                <Home />
+              </OrgGate>
             </ProtectedRoute>
           }
         />
@@ -53,7 +63,9 @@ export default function App() {
           path="/org/:orgId/entries"
           element={
             <ProtectedRoute>
-              <Entries />
+              <OrgGate>
+                <Entries />
+              </OrgGate>
             </ProtectedRoute>
           }
         />
@@ -61,7 +73,9 @@ export default function App() {
           path="/org/:orgId/events"
           element={
             <ProtectedRoute>
-              <Events />
+              <OrgGate>
+                <Events />
+              </OrgGate>
             </ProtectedRoute>
           }
         />
@@ -69,27 +83,33 @@ export default function App() {
           path="/org/:orgId/analytics"
           element={
             <ProtectedRoute>
-              <Analytics />
+              <OrgGate>
+                <Analytics />
+              </OrgGate>
             </ProtectedRoute>
           }
         />
 
-        {/* ✅ NUEVO: Miembros */}
+        {/* Miembros */}
         <Route
           path="/org/:orgId/members"
           element={
             <ProtectedRoute>
-              <Members />
+              <OrgGate>
+                <Members />
+              </OrgGate>
             </ProtectedRoute>
           }
         />
 
-        {/* ✅ NUEVO: Movimientos migrados */}
+        {/* Movimientos migrados */}
         <Route
           path="/org/:orgId/movimientos"
           element={
             <ProtectedRoute>
-              <MovimientosPage />
+              <OrgGate>
+                <MovimientosPage />
+              </OrgGate>
             </ProtectedRoute>
           }
         />
