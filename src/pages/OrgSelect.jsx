@@ -260,7 +260,7 @@ export default function OrgSelect() {
             <TileButton onClick={() => setCreateOpen((v) => !v)}>
               {busyCreate ? "Creando…" : "Crear nueva entrada"}
             </TileButton>
-            <TileButton onClick={() => nav("/unirse")}>Unirse a una botella</TileButton>
+            <TileButton onClick={() => nav("/unirse")}>Unirse a una entrada</TileButton>
           </div>
 
           {createOpen && (

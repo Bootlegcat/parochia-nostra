@@ -283,7 +283,7 @@ export default function Events() {
   // ✅ bottleId detectado (por mapping fijo)
   const [bottleId, setBottleId] = useState("");
 
-  // ✅ ROLE (viewer/editor/admin)
+  // ✅ ROLE (viewer/editor/administrador)
   const [role, setRole] = useState("viewer");
   const [roleReady, setRoleReady] = useState(false);
 
@@ -454,7 +454,7 @@ export default function Events() {
   async function resetMigration() {
     if (!orgRefs) return;
     if (!isAdmin) {
-      setError("No tienes permisos para resetear migración (solo admin).");
+      setError("No tienes permisos para resetear migración (solo administrador).");
       return;
     }
 
@@ -699,7 +699,7 @@ export default function Events() {
         setBootstrapInfo((s) => ({
           ...s,
           done: true,
-          note: "Modo solo-movimientos (viewer): se muestran entradas recientes.",
+        note: "Modo solo-movimientos (lector): se muestran entradas recientes.",
         }));
         return "recent-only";
       }
@@ -709,7 +709,7 @@ export default function Events() {
       setBootstrapInfo((s) => ({
         ...s,
         done: true,
-        note: "Movimientos sin campos de catálogo, pero puedes crear catálogos (admin/editor).",
+        note: "Movimientos sin campos de catálogo, pero puedes crear catálogos (administrador/editor).",
       }));
       return "full";
     }
@@ -1014,7 +1014,7 @@ export default function Events() {
     e.preventDefault();
 
     if (!canEdit) {
-      setError("No tienes permisos para crear categorías (solo editor/admin).");
+      setError("No tienes permisos para crear categorías (solo editor/administrador).");
       return;
     }
 
@@ -1042,7 +1042,7 @@ export default function Events() {
 
   async function onDeleteCategory(cat) {
     if (!canEdit) {
-      setError("No tienes permisos para eliminar categorías (solo editor/admin).");
+      setError("No tienes permisos para eliminar categorías (solo editor/administrador).");
       return;
     }
     if (!orgRefs || !cat?.id) return;
@@ -1065,7 +1065,7 @@ export default function Events() {
     e.preventDefault();
 
     if (!canEdit) {
-      setError("No tienes permisos para crear sub-categorías (solo editor/admin).");
+      setError("No tienes permisos para crear sub-categorías (solo editor/administrador).");
       return;
     }
 
@@ -1089,7 +1089,7 @@ export default function Events() {
 
   async function onDeleteSubCategory(sc) {
     if (!canEdit) {
-      setError("No tienes permisos para eliminar sub-categorías (solo editor/admin).");
+      setError("No tienes permisos para eliminar sub-categorías (solo editor/administrador).");
       return;
     }
     if (!orgRefs || !selectedCategoryId || selectedCategoryId === "__recent__" || !sc?.id) return;
@@ -1112,7 +1112,7 @@ export default function Events() {
     e.preventDefault();
 
     if (!canEdit) {
-      setError("No tienes permisos para crear conceptos (solo editor/admin).");
+      setError("No tienes permisos para crear conceptos (solo editor/administrador).");
       return;
     }
 
@@ -1140,7 +1140,7 @@ export default function Events() {
 
   async function onDeleteConcept(cn) {
     if (!canEdit) {
-      setError("No tienes permisos para eliminar conceptos (solo editor/admin).");
+      setError("No tienes permisos para eliminar conceptos (solo editor/administrador).");
       return;
     }
     if (!orgRefs || !selectedCategoryId || selectedCategoryId === "__recent__" || !selectedSubCategoryId || !cn?.id) return;
@@ -1161,7 +1161,7 @@ export default function Events() {
 
   async function onDeleteBankAccount(b) {
     if (!canEdit) {
-      setError("No tienes permisos para eliminar cuentas bancarias (solo editor/admin).");
+      setError("No tienes permisos para eliminar cuentas bancarias (solo editor/administrador).");
       return;
     }
     if (!orgRefs || !b?.id) return;
@@ -1234,7 +1234,7 @@ export default function Events() {
                 onClick={resetMigration}
                 disabled={!orgRefs || !isAdmin}
                 type="button"
-                title={!isAdmin ? "Solo admin" : ""}
+                title={!isAdmin ? "Solo administrador" : ""}
               >
                 Reset migración
               </button>
@@ -1305,7 +1305,7 @@ export default function Events() {
             <button
               className="rounded-xl bg-white text-[#111] border px-4 py-2 shadow-sm disabled:opacity-50"
               disabled={saving || !orgId || !canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             >
               {saving ? "Creando…" : "Crear"}
             </button>
@@ -1326,7 +1326,7 @@ export default function Events() {
                   onClick={() => onDeleteCategory(cat)}
                   className="rounded-lg border px-3 py-1 text-sm hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
                   disabled={!canEdit || busyCatId === cat.id}
-                  title={!canEdit ? "Solo editor/admin" : ""}
+                  title={!canEdit ? "Solo editor/administrador" : ""}
                   type="button"
                 >
                   {busyCatId === cat.id ? "Eliminando…" : "🗑️ Eliminar"}
@@ -1436,7 +1436,7 @@ export default function Events() {
             <button
               className="rounded-xl bg-white text-[#111] border px-4 py-2 shadow-sm disabled:opacity-50"
               disabled={saving || !orgId || !canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             >
               {saving ? "Creando…" : "Crear"}
             </button>
@@ -1473,7 +1473,7 @@ export default function Events() {
                   onClick={() => onDeleteSubCategory(sc)}
                   className="rounded-lg border px-3 py-1 text-sm hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
                   disabled={!canEdit || busySubId === sc.id}
-                  title={!canEdit ? "Solo editor/admin" : ""}
+                  title={!canEdit ? "Solo editor/administrador" : ""}
                   type="button"
                 >
                   {busySubId === sc.id ? "Eliminando…" : "🗑️ Eliminar"}
@@ -1581,7 +1581,7 @@ export default function Events() {
             <button
               className="rounded-xl bg-white text-[#111] border px-4 py-2 shadow-sm disabled:opacity-50"
               disabled={saving || !orgId || !canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             >
               {saving ? "Creando…" : "Crear"}
             </button>
@@ -1636,7 +1636,7 @@ export default function Events() {
                   onClick={() => onDeleteConcept(cn)}
                   className="rounded-lg border px-3 py-1 text-sm hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
                   disabled={!canEdit || busyConceptId === cn.id}
-                  title={!canEdit ? "Solo editor/admin" : ""}
+                  title={!canEdit ? "Solo editor/administrador" : ""}
                   type="button"
                 >
                   {busyConceptId === cn.id ? "Eliminando…" : "🗑️ Eliminar"}
@@ -1740,7 +1740,7 @@ export default function Events() {
               e.preventDefault();
 
               if (!canEdit) {
-                setError("No tienes permisos para crear cuentas bancarias (solo editor/admin).");
+                setError("No tienes permisos para crear cuentas bancarias (solo editor/administrador).");
                 return;
               }
 
@@ -1775,7 +1775,7 @@ export default function Events() {
             <button
               className="rounded-xl bg-white text-[#111] border px-4 py-2 shadow-sm disabled:opacity-50"
               disabled={saving || !orgId || !canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             >
               {saving ? "Creando…" : "Crear"}
             </button>
@@ -1796,7 +1796,7 @@ export default function Events() {
                   onClick={() => onDeleteBankAccount(b)}
                   className="rounded-lg border px-3 py-1 text-sm hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
                   disabled={!canEdit || busyBankId === b.id}
-                  title={!canEdit ? "Solo editor/admin" : ""}
+                  title={!canEdit ? "Solo editor/administrador" : ""}
                   type="button"
                 >
                   {busyBankId === b.id ? "Eliminando…" : "🗑️ Eliminar"}

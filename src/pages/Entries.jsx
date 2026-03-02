@@ -516,7 +516,7 @@ export default function Entries() {
     e.preventDefault();
     setError("");
 
-    if (!canEdit) return setError("No tienes permisos para agregar (solo editor/admin).");
+    if (!canEdit) return setError("No tienes permisos para agregar (solo editor/administrador).");
     if (!entriesRefs || !orgId) return setError("No hay organización seleccionada.");
 
     const amt = Number(amount);
@@ -594,7 +594,7 @@ export default function Entries() {
   async function onDelete(item) {
     if (!entriesRefs || !item?.id) return;
 
-    if (!canEdit) return setError("No tienes permisos para eliminar (solo editor/admin).");
+    if (!canEdit) return setError("No tienes permisos para eliminar (solo editor/administrador).");
 
     const ok = window.confirm(
       `¿Eliminar este ${item.type === "income" ? "ingreso" : "egreso"} de ${item.amount}?`
@@ -624,7 +624,7 @@ export default function Entries() {
     if (!authReady) return "";
     if (!roleReady) return "Cargando permisos…";
     if (canEdit) return "";
-    return "Tu rol es viewer: solo puedes ver. Pide al admin que te suba a editor.";
+    return "Tu rol es lector: solo puedes ver. Pide al administrador que te suba a editor.";
   }, [authReady, roleReady, canEdit]);
 
   return (
@@ -657,7 +657,7 @@ export default function Entries() {
               value={type}
               onChange={(e) => setType(e.target.value)}
               disabled={!canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             >
               <option value="income">Ingreso</option>
               <option value="expense">Egreso</option>
@@ -674,7 +674,7 @@ export default function Entries() {
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               disabled={!canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             />
           </div>
 
@@ -686,7 +686,7 @@ export default function Entries() {
               value={date}
               onChange={(e) => setDate(e.target.value)}
               disabled={!canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             />
           </div>
 
@@ -699,7 +699,7 @@ export default function Entries() {
                 value={bankAccountId}
                 onChange={(e) => setBankAccountId(e.target.value)}
                 disabled={!canEdit}
-                title={!canEdit ? "Solo editor/admin" : ""}
+                title={!canEdit ? "Solo editor/administrador" : ""}
               >
                 <option value="">Selecciona una cuenta…</option>
                 {bankAccounts.map((b) => (
@@ -715,7 +715,7 @@ export default function Entries() {
                 onChange={(e) => setBankAccountText(e.target.value)}
                 placeholder='Ej. "BANORTE 8686"'
                 disabled={!canEdit}
-                title={!canEdit ? "Solo editor/admin" : ""}
+                title={!canEdit ? "Solo editor/administrador" : ""}
               />
             )}
           </div>
@@ -730,7 +730,7 @@ export default function Entries() {
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
                 disabled={!canEdit}
-                title={!canEdit ? "Solo editor/admin" : ""}
+                title={!canEdit ? "Solo editor/administrador" : ""}
               >
                 <option value="">Selecciona…</option>
                 {categoriesForType.map((c) => (
@@ -748,7 +748,7 @@ export default function Entries() {
                 value={subCategoryId}
                 onChange={(e) => setSubCategoryId(e.target.value)}
                 disabled={!categoryId || !canEdit}
-                title={!canEdit ? "Solo editor/admin" : ""}
+                title={!canEdit ? "Solo editor/administrador" : ""}
               >
                 <option value="">Selecciona…</option>
                 {subCategories.map((s) => (
@@ -766,7 +766,7 @@ export default function Entries() {
                 value={conceptId}
                 onChange={(e) => setConceptId(e.target.value)}
                 disabled={!subCategoryId || !canEdit}
-                title={!canEdit ? "Solo editor/admin" : ""}
+                title={!canEdit ? "Solo editor/administrador" : ""}
               >
                 <option value="">Selecciona…</option>
                 {concepts.map((c) => (
@@ -811,7 +811,7 @@ export default function Entries() {
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
               disabled={!canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             >
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
@@ -829,7 +829,7 @@ export default function Entries() {
               onChange={(e) => setBeneficiary(e.target.value)}
               placeholder='Ej. "Banorte" o "Sistemas y Equipos Ejecutivos, S.A."'
               disabled={!canEdit}
-              title={!canEdit ? "Solo editor/admin" : ""}
+              title={!canEdit ? "Solo editor/administrador" : ""}
             />
           </div>
         </div>
@@ -842,7 +842,7 @@ export default function Entries() {
             onChange={(e) => setNote(e.target.value)}
             placeholder="Añade una nota…"
             disabled={!canEdit}
-            title={!canEdit ? "Solo editor/admin" : ""}
+            title={!canEdit ? "Solo editor/administrador" : ""}
           />
         </div>
 
@@ -850,7 +850,7 @@ export default function Entries() {
           <button
             className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
             disabled={saving || !orgId || !canEdit}
-            title={!canEdit ? "Solo editor/admin" : ""}
+            title={!canEdit ? "Solo editor/administrador" : ""}
           >
             {saving ? "Guardando…" : "Agregar"}
           </button>
@@ -902,7 +902,7 @@ export default function Entries() {
                   onClick={() => onDelete(it)}
                   className="shrink-0 rounded-lg border px-3 py-1 text-sm hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
                   disabled={busyId === it.id || !canEdit}
-                  title={!canEdit ? "Solo editor/admin" : "Eliminar"}
+                  title={!canEdit ? "Solo editor/administrador" : "Eliminar"}
                 >
                   {busyId === it.id ? "Eliminando…" : "🗑️ Eliminar"}
                 </button>
