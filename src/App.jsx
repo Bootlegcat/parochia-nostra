@@ -7,6 +7,8 @@ import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import OrgGate from "./components/OrgGate.jsx";
 
 import OrgSelect from "./pages/OrgSelect.jsx";
+import SpecialOrgs from "./pages/SpecialOrgs.jsx";
+import JoinBottle from "./pages/JoinBottle.jsx";
 import Home from "./pages/Home.jsx";
 import Entries from "./pages/Entries.jsx";
 import Events from "./pages/Events.jsx";
@@ -32,6 +34,24 @@ export default function App() {
           element={
             <ProtectedRoute>
               <OrgSelect />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/especiales"
+          element={
+            <ProtectedRoute>
+              <SpecialOrgs />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/unirse"
+          element={
+            <ProtectedRoute>
+              <JoinBottle />
             </ProtectedRoute>
           }
         />

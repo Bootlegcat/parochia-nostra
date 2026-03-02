@@ -1,0 +1,76 @@
+Conversation Summary — Parochia Nostra
+
+Date: 2026-02-05
+Project: Parochia Nostra (Firebase + React)
+User goal: Secure routing + bottle isolation, invitations by code, personal bottles, and UI changes.
+
+High-level outcomes agreed so far
+1) Security + routing
+- Firestore rules: restrict data to members of botellas/{bottleId}.
+- Added users/{uid} for defaultBottleId.
+- Added personal bottle creation via ensurePersonalBottle on auth.
+- OrgGate: if orgId is special (iglesia / construyendo-lazos), allow only if member; otherwise redirect to personal bottle.
+- App.jsx: wrap /org/:orgId/* routes with OrgGate inside ProtectedRoute.
+
+2) Personal bottles
+- ensurePersonalBottle(uid, email): creates bottle (ownerUid=uid), creates members/{uid} with role admin, stores defaultBottleId in users/{uid}.
+- ProtectedRoute runs ensurePersonalBottle on auth.
+
+3) Page updates for orgId -> bottleId
+- Changed mapping to: bottleId = BOTTLE_ID_BY_ORG[orgId] || orgId
+- Applied to Events.jsx, Entries.jsx, Analytics.jsx, Members.jsx, MovimientosPage.jsx.
+- Home.jsx changed redirects to /organizaciones.
+
+4) Events.jsx fix
+- catalogMode: recent-only ONLY for viewers; admin/editor can create catalogs even if no catalog fields exist.
+- Removed blocking logic for admin/editor.
+
+5) Members flow requirement
+- User requested: keep Members UI exactly as before (Tu acceso, Invitar, Invitaciones, Miembros), add ONLY a bottom section/button to enter invite code.
+- Goal: allow user to join another bottle without losing current bottle; preserve roles display and admin panel.
+- Discussed codes format: bottleId:inviteId.
+
+6) Invites by code (no email sending)
+- Clarified: Firestore does not send emails; invite codes must be shared manually.
+- Proposed and later asked to integrate invitesGlobal (global invites collection) to support joining from any bottle.
+- User asked to NOT change members UI flow; add only bottom section for invite code.
+
+7) Deploys
+- Firestore rules deployed successfully.
+- Hosting deployed successfully to https://parochia-nostra.web.app
+- Git push fixed by switching remote to HTTPS.
+
+Pending / next steps (agreed order)
+Phase 1: Members finalized first (UI unchanged + bottom code input, joining other bottle without breaking current).
+Phase 2: New initial screen (Create bottle / Join bottle / dropdown of accessible bottles + Enter button).
+Phase 3: Entries — separate income vs expense categories; show category list filtered by type.
+Phase 4: Events — add Ingresos/Egresos toggle; only show categories for that type; remove analytic tables.
+Phase 5: Analytics — move tables from Events to Analytics with cascaded dropdowns (category -> subcategory -> concept -> bank).
+
+Known warnings / build notes
+- ESLint warnings due to unused imports/states when Members was simplified; fix by keeping original UI and only adding bottom section.
+- Firebase CLI warning about punycode deprecation (non-blocking).
+
+Rules integration (important)
+- InvitesGlobal block should be integrated into existing firestore.rules (not replacing current rules).
+- user asked: do not remove existing flow, only add.
+
+Key files touched in discussion
+- src/pages/Events.jsx
+- src/pages/Entries.jsx
+- src/pages/Analytics.jsx
+- src/pages/Home.jsx
+- src/pages/Members.jsx
+- src/pages/MovimientosPage.jsx
+- src/components/ProtectedRoute.jsx
+- src/components/OrgGate.jsx
+- src/App.jsx
+- firestore.rules
+- src/utils/ensurePersonalBottle.js
+
+Notes on Members UI requirement
+- Must show role and admin panels exactly like previous UI.
+- Only addition: bottom section/button for entering invite code to join another bottle.
+- Invite code suggested format: bottleId:inviteId (one string to share).
+
+If you want the full raw message-by-message transcript, ask and it can be generated next.

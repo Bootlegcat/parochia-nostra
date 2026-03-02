@@ -1,9 +1,10 @@
 // src/pages/Members.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, Link, useParams } from "react-router-dom";
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -30,15 +31,31 @@ function normEmail(s) {
   return String(s || "").trim().toLowerCase();
 }
 
+function parseInviteCode(raw, fallbackBottleId) {
+  const t = String(raw || "").trim();
+  if (!t) return { bottleId: "", inviteId: "" };
+  if (t.includes(":")) {
+    const [bottleId, inviteId] = t.split(":").map((x) => x.trim());
+    return { bottleId: bottleId || "", inviteId: inviteId || "" };
+  }
+  return { bottleId: fallbackBottleId || "", inviteId: t };
+}
+
 export default function Members() {
-  const auth = getAuth();
-  const user = auth.currentUser;
   const { orgId } = useParams();
+
+  // ✅ mantener UI/flujo, pero hacer el user reactivo (evita nulls raros)
+  const [user, setUser] = useState(() => getAuth().currentUser);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(getAuth(), (u) => setUser(u));
+    return () => unsub();
+  }, []);
 
   // hooks siempre primero
   const bottleId = useMemo(() => {
     if (!orgId) return "";
-    return BOTTLE_ID_BY_ORG[orgId] || orgId; // ✅ mapping si existe, si no bottleId personal
+    return BOTTLE_ID_BY_ORG[orgId] || orgId; // permite orgId directo si algún día usas bottleId en URL
   }, [orgId]);
 
   const refs = useMemo(() => {
@@ -54,9 +71,17 @@ export default function Members() {
   const [loading, setLoading] = useState(true);
   const [member, setMember] = useState(null);
 
+  // ✅ abajo: ingresar código (siempre visible)
   const [inviteCode, setInviteCode] = useState("");
   const [claimBusy, setClaimBusy] = useState(false);
+  const [showClaim, setShowClaim] = useState(false);
 
+  // ✅ unirse a otra botella con código
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinBusy, setJoinBusy] = useState(false);
+
+  // admin panel
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -66,7 +91,7 @@ export default function Members() {
   const [error, setError] = useState("");
   const [okMsg, setOkMsg] = useState("");
 
-  // ✅ role con fallback para que NO salga vacío
+  // ✅ rol con fallback para que NO salga vacío
   const myRole = member?.role || "viewer";
   const isAdmin = myRole === "admin";
 
@@ -92,12 +117,21 @@ export default function Members() {
 
   async function loadAdminData() {
     if (!refs || !isAdmin) return;
+
     setAdminBusy(true);
     setError("");
     try {
-      const mSnap = await getDocs(query(refs.membersCol, orderBy("createdAt", "desc")));
+      // members
+      let mSnap;
+      try {
+        mSnap = await getDocs(query(refs.membersCol, orderBy("createdAt", "desc")));
+      } catch {
+        // fallback si algo raro con orderBy/índices
+        mSnap = await getDocs(refs.membersCol);
+      }
       setMembers(mSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
+      // invites
       let iSnap;
       try {
         iSnap = await getDocs(query(refs.invitesCol, orderBy("createdAt", "desc"), limit(50)));
@@ -130,31 +164,67 @@ export default function Members() {
     const code = inviteCode.trim();
     if (!code) return setError("Ingresa un código de invitación.");
     if (!refs?.memberDoc) return setError("No se pudo resolver la organización.");
+    if (!user?.email) return setError("Tu usuario no tiene email. Inicia sesión con email.");
 
     try {
       setClaimBusy(true);
 
+      const parsed = parseInviteCode(code, bottleId);
+      if (!parsed.bottleId || !parsed.inviteId) {
+        throw new Error("Código inválido. Usa formato: bottleId:inviteId");
+      }
+      if (parsed.bottleId !== bottleId) {
+        throw new Error(
+          "Este código es para otra botella. Usa el botón de abajo: “Ingresar código de invitación”."
+        );
+      }
+
+      // ✅ IMPORTANTE: el invite debe EXISTIR. Si no existe, setDoc(inviteDoc) crearía uno nuevo y rompe reglas.
+      // Marcamos used=true con updateDoc (no setDoc) para que si no existe, truene con mensaje claro.
       await setDoc(
         refs.memberDoc,
         {
           role: "viewer",
-          email: normEmail(user?.email),
-          inviteId: code,
+          email: normEmail(user.email),
+          inviteId: parsed.inviteId,
           createdAt: serverTimestamp(),
         },
+        { merge: false } // crea doc limpio (y cumple rules de create)
+      );
+
+      // ✅ consume invite (debe existir)
+      await updateDoc(refs.inviteDoc(parsed.inviteId), { used: true });
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        { bottleIds: arrayUnion(bottleId) },
         { merge: true }
       );
 
-      await updateDoc(refs.inviteDoc(code), { used: true });
-
       setOkMsg("✅ Acceso concedido. Ya eres miembro.");
       setInviteCode("");
+      setShowClaim(false);
+
       await loadMyMembership();
+      await loadAdminData();
     } catch (e2) {
-      setError(
-        e2?.message ||
-          "No se pudo usar el código. Verifica que sea correcto y que tu email coincida con el invite."
-      );
+      const msg = e2?.message || String(e2);
+
+      // mensajes comunes para que entiendas rápido
+      if (msg.toLowerCase().includes("no document to update")) {
+        setError(
+          "❌ Ese código no existe en esta organización (o fue borrado). Pide al admin que te copie el código exacto."
+        );
+      } else if (msg.toLowerCase().includes("missing or insufficient permissions")) {
+        setError(
+          "❌ No tienes permiso para usar ese código. Revisa que el invite esté creado para TU email y que no esté usado."
+        );
+      } else {
+        setError(
+          msg ||
+            "No se pudo usar el código. Verifica que sea correcto y que tu email coincida con el invite."
+        );
+      }
     } finally {
       setClaimBusy(false);
     }
@@ -182,7 +252,7 @@ export default function Members() {
         createdBy: user?.uid || "",
       });
 
-      setOkMsg(`✅ Invitación creada. Código: ${ref.id}`);
+      setOkMsg(`✅ Invitación creada. Código: ${bottleId}:${ref.id}`);
       setInviteEmail("");
       setInviteRole("viewer");
       await loadAdminData();
@@ -264,8 +334,66 @@ export default function Members() {
     }
   }
 
-  // guards al final
-  if (!orgId) return <Navigate to="/organizaciones" replace />; // ✅ ruta nueva
+  async function onJoinOtherBottle(e) {
+    e.preventDefault();
+    setError("");
+    setOkMsg("");
+
+    const parsed = parseInviteCode(joinCode, "");
+    if (!parsed.bottleId || !parsed.inviteId) {
+      return setError("Código inválido. Usa formato: bottleId:inviteId");
+    }
+    if (!user?.uid || !user?.email) return setError("No hay sesión activa con email.");
+
+    try {
+      setJoinBusy(true);
+
+      const targetBottleId = parsed.bottleId;
+      const inviteId = parsed.inviteId;
+
+      const inviteRef = doc(db, "botellas", targetBottleId, "invites", inviteId);
+      const inviteSnap = await getDoc(inviteRef);
+      if (!inviteSnap.exists()) throw new Error("Ese código no existe.");
+      const inv = inviteSnap.data() || {};
+
+      if (inv.used === true) throw new Error("Este código ya fue usado.");
+      if (normEmail(inv.email) !== normEmail(user.email)) {
+        throw new Error("Este código no es para tu correo.");
+      }
+
+      await setDoc(
+        doc(db, "botellas", targetBottleId, "members", user.uid),
+        {
+          role: "viewer",
+          email: normEmail(user.email),
+          inviteId,
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await updateDoc(inviteRef, { used: true });
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        { bottleIds: arrayUnion(targetBottleId) },
+        { merge: true }
+      );
+
+      setOkMsg(
+        `✅ Te uniste a la botella: ${targetBottleId}. Ahora ya tienes acceso.`
+      );
+      setJoinCode("");
+      setJoinOpen(false);
+    } catch (e2) {
+      setError(e2?.message || String(e2));
+    } finally {
+      setJoinBusy(false);
+    }
+  }
+
+  // guards al final (igual flujo)
+  if (!orgId) return <Navigate to="/organizaciones" replace />;
   if (!user) return <Navigate to="/" replace />;
   if (!bottleId) return <Navigate to="/organizaciones" replace />;
 
@@ -312,213 +440,211 @@ export default function Members() {
         </div>
       )}
 
-      {/* NO MEMBER: claim */}
-      {!member && (
-        <div className="rounded-2xl border bg-white p-5 space-y-3">
-          <div className="text-lg font-semibold">No tienes acceso a esta organización.</div>
-          <div className="text-slate-600 text-sm">
-            Pide al administrador un <b>código de invitación</b> y pégalo aquí.
-          </div>
+      {/* TU ACCESO (igual que antes) */}
+      <div className="rounded-2xl border bg-white p-5 mb-6">
+        <div className="text-lg font-semibold">Tu acceso</div>
+        <div className="text-sm text-slate-600 mt-1">
+          Rol: <b>{myRole}</b> · Email: <b>{member?.email || user.email || "(sin email)"}</b>
+        </div>
 
-          <form onSubmit={onClaimInvite} className="flex flex-col md:flex-row gap-3">
+        {!member && (
+          <div className="mt-3 text-sm text-slate-600">
+            Aún no eres miembro de esta organización.
+          </div>
+        )}
+
+        {!isAdmin && member && (
+          <div className="mt-3 text-sm text-slate-600">
+            Solo el <b>admin</b> puede invitar y cambiar roles.
+          </div>
+        )}
+      </div>
+
+      {/* ADMIN: invitar miembro (igual) */}
+      {isAdmin && (
+        <div className="rounded-2xl border bg-white p-5 mb-6">
+          <div className="text-lg font-semibold mb-3">Invitar miembro</div>
+          <form onSubmit={onCreateInvite} className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <input
-              className="flex-1 rounded-xl border px-3 py-2"
-              placeholder="Código de invitación (inviteId)"
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value)}
+              className="md:col-span-3 rounded-xl border px-3 py-2"
+              placeholder="email@ejemplo.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              disabled={adminBusy}
             />
+            <select
+              className="rounded-xl border px-3 py-2"
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value)}
+              disabled={adminBusy}
+            >
+              <option value="viewer">viewer</option>
+              <option value="editor">editor</option>
+              <option value="admin">admin</option>
+            </select>
             <button
               className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
-              disabled={claimBusy}
+              disabled={adminBusy}
             >
-              {claimBusy ? "Validando…" : "Unirme"}
+              Crear invite
             </button>
           </form>
-
-          <div className="text-xs text-slate-500">
-            Email actual: <b>{user.email || "(sin email)"}</b>
+          <div className="text-xs text-slate-500 mt-2">
+            Nota: por seguridad, al hacer claim el usuario entra como <b>viewer</b>. Luego tú lo subes a editor/admin aquí.
           </div>
         </div>
       )}
 
-      {/* MEMBER: acceso */}
-      {member && (
-        <div className="rounded-2xl border bg-white p-5">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <div className="text-lg font-semibold">Tu acceso</div>
-              <div className="text-sm text-slate-600">
-                Rol: <b>{myRole}</b> · Email: <b>{member.email || user.email}</b>
-              </div>
-            </div>
-
-            {!isAdmin && (
-              <div className="text-sm text-slate-600">
-                Solo el <b>admin</b> puede invitar y cambiar roles.
-              </div>
-            )}
-          </div>
-
-          {/* ✅ Tarjeta de ayuda si no eres admin */}
-          {!isAdmin && (
-            <div className="mt-4 rounded-xl border bg-slate-50 p-3 text-sm text-slate-700">
-              <div className="font-semibold mb-1">No aparece el panel de Admin</div>
-              <div>
-                Tu usuario no tiene <b>role: "admin"</b> en Firestore.
-                <br />
-                Ve a:
-                <div className="mt-2 font-mono text-xs bg-white border rounded-lg p-2">
-                  botellas/{bottleId}/members/{user.uid}
-                </div>
-                y pon <b>role = "admin"</b>.
-              </div>
+      {/* ADMIN: invitaciones (igual) */}
+      {isAdmin && (
+        <div className="rounded-2xl border bg-white p-5 mb-6">
+          <div className="text-lg font-semibold mb-3">Invitaciones</div>
+          {invites.length === 0 ? (
+            <div className="text-sm text-slate-600">No hay invites.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500">
+                    <th className="py-2 pr-3">Código</th>
+                    <th className="py-2 pr-3">Email</th>
+                    <th className="py-2 pr-3">Rol</th>
+                    <th className="py-2 pr-3">Usado</th>
+                    <th className="py-2 pr-3">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invites.map((inv) => (
+                    <tr key={inv.id} className="border-t">
+                      <td className="py-2 pr-3 font-mono">{inv.id}</td>
+                      <td className="py-2 pr-3">{inv.email}</td>
+                      <td className="py-2 pr-3">{inv.role}</td>
+                      <td className="py-2 pr-3">{inv.used ? "sí" : "no"}</td>
+                      <td className="py-2 pr-3 flex gap-2">
+                        <button
+                          className="rounded-lg border px-3 py-1 hover:bg-slate-50"
+                          onClick={() => onCopy(inv.id)}
+                          type="button"
+                        >
+                          Copiar
+                        </button>
+                        <button
+                          className="rounded-lg border px-3 py-1 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => onDeleteInvite(inv.id)}
+                          type="button"
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
       )}
 
-      {/* ADMIN PANEL */}
+      {/* ADMIN: miembros (igual) */}
       {isAdmin && (
-        <div className="mt-6 space-y-6">
-          {/* Crear invitación */}
-          <div className="rounded-2xl border bg-white p-5">
-            <div className="text-lg font-semibold mb-3">Invitar miembro</div>
-            <form onSubmit={onCreateInvite} className="grid grid-cols-1 md:grid-cols-5 gap-3">
-              <input
-                className="md:col-span-3 rounded-xl border px-3 py-2"
-                placeholder="email@ejemplo.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-              />
-              <select
-                className="rounded-xl border px-3 py-2"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-              >
-                <option value="viewer">viewer</option>
-                <option value="editor">editor</option>
-                <option value="admin">admin</option>
-              </select>
-              <button
-                className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
-                disabled={adminBusy}
-              >
-                Crear invite
-              </button>
-            </form>
-            <div className="text-xs text-slate-500 mt-2">
-              Nota: por seguridad, al hacer claim el usuario entra como <b>viewer</b>. Luego tú lo
-              subes a editor/admin aquí.
-            </div>
-          </div>
-
-          {/* Invites */}
-          <div className="rounded-2xl border bg-white p-5">
-            <div className="text-lg font-semibold mb-3">Invitaciones</div>
-            {invites.length === 0 ? (
-              <div className="text-sm text-slate-600">No hay invites.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-slate-500">
-                      <th className="py-2 pr-3">Código</th>
-                      <th className="py-2 pr-3">Email</th>
-                      <th className="py-2 pr-3">Rol</th>
-                      <th className="py-2 pr-3">Usado</th>
-                      <th className="py-2 pr-3">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invites.map((inv) => (
-                      <tr key={inv.id} className="border-t">
-                        <td className="py-2 pr-3 font-mono">{inv.id}</td>
-                        <td className="py-2 pr-3">{inv.email}</td>
-                        <td className="py-2 pr-3">{inv.role}</td>
-                        <td className="py-2 pr-3">{inv.used ? "sí" : "no"}</td>
-                        <td className="py-2 pr-3 flex gap-2">
-                          <button
-                            className="rounded-lg border px-3 py-1 hover:bg-slate-50"
-                            onClick={() => onCopy(inv.id)}
-                            type="button"
-                          >
-                            Copiar
-                          </button>
+        <div className="rounded-2xl border bg-white p-5 mb-6">
+          <div className="text-lg font-semibold mb-3">Miembros</div>
+          {members.length === 0 ? (
+            <div className="text-sm text-slate-600">No hay miembros.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500">
+                    <th className="py-2 pr-3">UID</th>
+                    <th className="py-2 pr-3">Email</th>
+                    <th className="py-2 pr-3">Rol</th>
+                    <th className="py-2 pr-3">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((m) => (
+                    <tr key={m.id} className="border-t">
+                      <td className="py-2 pr-3 font-mono">{m.id}</td>
+                      <td className="py-2 pr-3">{m.email || ""}</td>
+                      <td className="py-2 pr-3">
+                        <select
+                          className="rounded-lg border px-2 py-1"
+                          value={m.role || "viewer"}
+                          onChange={(e) => onSetRole(m.id, e.target.value)}
+                          disabled={adminBusy}
+                        >
+                          <option value="viewer">viewer</option>
+                          <option value="editor">editor</option>
+                          <option value="admin">admin</option>
+                        </select>
+                      </td>
+                      <td className="py-2 pr-3">
+                        {m.id === user.uid ? (
+                          <span className="text-slate-500">(tú)</span>
+                        ) : (
                           <button
                             className="rounded-lg border px-3 py-1 hover:bg-red-50 hover:text-red-700"
-                            onClick={() => onDeleteInvite(inv.id)}
+                            onClick={() => onRemoveMember(m.id)}
+                            disabled={adminBusy}
                             type="button"
                           >
                             Eliminar
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Miembros */}
-          <div className="rounded-2xl border bg-white p-5">
-            <div className="text-lg font-semibold mb-3">Miembros</div>
-            {members.length === 0 ? (
-              <div className="text-sm text-slate-600">No hay miembros.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-slate-500">
-                      <th className="py-2 pr-3">UID</th>
-                      <th className="py-2 pr-3">Email</th>
-                      <th className="py-2 pr-3">Rol</th>
-                      <th className="py-2 pr-3">Acciones</th>
+                        )}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {members.map((m) => (
-                      <tr key={m.id} className="border-t">
-                        <td className="py-2 pr-3 font-mono">{m.id}</td>
-                        <td className="py-2 pr-3">{m.email || ""}</td>
-                        <td className="py-2 pr-3">
-                          <select
-                            className="rounded-lg border px-2 py-1"
-                            value={m.role || "viewer"}
-                            onChange={(e) => onSetRole(m.id, e.target.value)}
-                            disabled={adminBusy}
-                          >
-                            <option value="viewer">viewer</option>
-                            <option value="editor">editor</option>
-                            <option value="admin">admin</option>
-                          </select>
-                        </td>
-                        <td className="py-2 pr-3">
-                          {m.id === user.uid ? (
-                            <span className="text-slate-500">(tú)</span>
-                          ) : (
-                            <button
-                              className="rounded-lg border px-3 py-1 hover:bg-red-50 hover:text-red-700"
-                              onClick={() => onRemoveMember(m.id)}
-                              disabled={adminBusy}
-                              type="button"
-                            >
-                              Eliminar
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="text-xs text-slate-500 mt-2">
-              Si eliminas a alguien, pierde acceso inmediatamente.
+                  ))}
+                </tbody>
+              </table>
             </div>
+          )}
+          <div className="text-xs text-slate-500 mt-2">
+            Si eliminas a alguien, pierde acceso inmediatamente.
           </div>
         </div>
       )}
+
+      {/* ✅ ÚNICO CAMBIO PEDIDO: botón abajo para ingresar código */}
+      <div className="rounded-2xl border bg-white p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold">Ingresar código de invitación</div>
+            <div className="text-sm text-slate-600">
+              Pega aquí el código que te dio un admin para unirte a otra botella.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setJoinOpen((v) => !v)}
+            className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50"
+          >
+            {joinOpen ? "Cerrar" : "Ingresar código"}
+          </button>
+        </div>
+
+        {joinOpen && (
+          <form onSubmit={onJoinOtherBottle} className="mt-4 flex flex-col md:flex-row gap-3">
+            <input
+              className="flex-1 rounded-xl border px-3 py-2"
+              placeholder="Código (bottleId:inviteId)"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+            />
+            <button
+              className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
+              disabled={joinBusy}
+            >
+              {joinBusy ? "Validando…" : "Unirme"}
+            </button>
+          </form>
+        )}
+
+        <div className="text-xs text-slate-500 mt-3">
+          Email actual: <b>{user.email || "(sin email)"}</b>
+        </div>
+      </div>
     </div>
   );
 }

@@ -119,6 +119,14 @@ function normalizeDate(value, fallback) {
   return new Date(value);
 }
 
+function normKey(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function bucketOf(rangeId, dateLike) {
   const d = normalizeDate(dateLike);
   if (rangeId === "minute") return fmtBucket("minute", startOfMinute(d));
@@ -236,6 +244,109 @@ function groupEntriesByTimeAll(entries, rangeId) {
   }));
 }
 
+// ✅ Totales simples
+function totals(list) {
+  let ingreso = 0;
+  let gasto = 0;
+  for (const en of list) {
+    const amt = Number(en.amount || 0);
+    if (en.type === "income") ingreso += amt;
+    else gasto += amt;
+  }
+  return { ingreso, gasto, neto: ingreso - gasto };
+}
+
+function fmtMoney(n) {
+  const v = Number(n || 0);
+  return v.toLocaleString("es-MX", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+// ✅ Agrupar por tiempo (para tablas por categoría/sub/concepto/cuenta)
+function groupEntries(list, rangeId) {
+  const map = new Map();
+  for (const en of list) {
+    const b = bucketOf(rangeId, en.date || en.createdAt);
+    const obj = map.get(b) || { ingreso: 0, gasto: 0 };
+    const amt = Number(en.amount || 0);
+    if (en.type === "income") obj.ingreso += amt;
+    else obj.gasto += amt;
+    map.set(b, obj);
+  }
+  return Array.from(map.entries())
+    .map(([bucket, v]) => ({
+      bucket,
+      ingreso: v.ingreso,
+      gasto: v.gasto,
+      neto: v.ingreso - v.gasto,
+    }))
+    .sort((a, b) => a.bucket.localeCompare(b.bucket));
+}
+
+function entryMillis(e) {
+  const d = normalizeDate(e.date || e.createdAt);
+  const ms = d && !isNaN(d.getTime()) ? d.getTime() : 0;
+  return ms;
+}
+function sortByDateDesc(a, b) {
+  return entryMillis(b) - entryMillis(a);
+}
+
+function EntriesList({ list }) {
+  const ordered = useMemo(() => {
+    const copy = Array.isArray(list) ? [...list] : [];
+    copy.sort(sortByDateDesc);
+    return copy;
+  }, [list]);
+
+  return (
+    <div className="mt-3 border rounded-xl overflow-hidden">
+      <div className="max-h-[320px] overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-white border-b">
+            <tr className="text-slate-600">
+              <th className="text-left py-2 px-2">Fecha</th>
+              <th className="text-left py-2 px-2">Tipo</th>
+              <th className="text-right py-2 px-2">Monto</th>
+              <th className="text-left py-2 px-2">Forma pago</th>
+              <th className="text-left py-2 px-2">Beneficiario</th>
+              <th className="text-left py-2 px-2">Referencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ordered.map((e) => {
+              const d = normalizeDate(e.date || e.createdAt);
+              const dateStr = d && !isNaN(d.getTime()) ? d.toLocaleDateString("es-MX") : "—";
+              const isInc = e.type === "income";
+              return (
+                <tr key={e.id} className="border-b last:border-0">
+                  <td className="py-2 px-2">{dateStr}</td>
+                  <td className="py-2 px-2">{isInc ? "Ingreso" : "Gasto"}</td>
+                  <td className={"py-2 px-2 text-right " + (isInc ? "text-green-600" : "text-red-600")}>
+                    {fmtMoney(e.amount || 0)}
+                  </td>
+                  <td className="py-2 px-2">{e.formaPago || e.paymentMethod || "—"}</td>
+                  <td className="py-2 px-2">{e.beneficiario || e.beneficiary || "—"}</td>
+                  <td className="py-2 px-2">{e.referencia || e.reference || "—"}</td>
+                </tr>
+              );
+            })}
+            {ordered.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-6 text-center text-slate-500">
+                  Sin operaciones.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function ChartCard({ title, children }) {
   return (
     <div className="rounded-2xl border bg-white p-5 mb-6">
@@ -252,7 +363,13 @@ function TimeSeriesChart({ data, lines, colorByKey = {} }) {
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
         <YAxis tick={{ fontSize: 12 }} />
-        <Tooltip />
+        <Tooltip
+          formatter={(value) => {
+            if (typeof value === "number") return fmtMoney(value);
+            const n = Number(value);
+            return Number.isFinite(n) ? fmtMoney(n) : value;
+          }}
+        />
         <Legend />
         {lines.map((k) => (
           <Line
@@ -436,10 +553,22 @@ export default function Analytics() {
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [concepts, setConcepts] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
 
   const [selectedCats, setSelectedCats] = useState([]);
   const [selectedSubs, setSelectedSubs] = useState([]);
   const [selectedConcepts, setSelectedConcepts] = useState([]);
+
+  // ✅ selección para tablas (single-select)
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedSubCategoryId, setSelectedSubCategoryId] = useState("");
+  const [selectedConceptId, setSelectedConceptId] = useState("");
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState("");
+
+  const [groupCatBy, setGroupCatBy] = useState("month");
+  const [groupSubBy, setGroupSubBy] = useState("month");
+  const [groupConceptBy, setGroupConceptBy] = useState("month");
+  const [groupBankBy, setGroupBankBy] = useState("month");
 
   const [range, setRange] = useState("month");
   const [selectedYear, setSelectedYear] = useState(() => String(new Date().getFullYear()));
@@ -447,6 +576,7 @@ export default function Analytics() {
   const [excelBusy, setExcelBusy] = useState(false);
   const [excelMsg, setExcelMsg] = useState("");
   const [excelLinks, setExcelLinks] = useState(null);
+  const [showDetailedTables, setShowDetailedTables] = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(getAuth(), (user) => setUid(user?.uid || null));
@@ -459,74 +589,129 @@ export default function Analytics() {
     setCategories([]);
     setSubCategories([]);
     setConcepts([]);
+    setBankAccounts([]);
     setSelectedCats([]);
     setSelectedSubs([]);
     setSelectedConcepts([]);
+    setSelectedCategoryId("");
+    setSelectedSubCategoryId("");
+    setSelectedConceptId("");
+    setSelectedBankAccountId("");
   }, [bottleId]);
 
   useEffect(() => {
     async function load() {
       if (!uid || !orgId || !bottleId) return;
 
-      /* ======= movimientos: SIN orderBy("Fecha") (Iglesia puede no tenerlo) ======= */
-      const movSnap = await getDocs(collection(db, "botellas", bottleId, "movimientos"));
-      const movs = movSnap.docs
-        .map(normalizeMovimiento)
-        .filter((m) => m && m.date && !isNaN(new Date(m.date).getTime()))
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      setEntries(movs);
+      // ======= movimientos: SIN orderBy("Fecha") (Iglesia puede no tenerlo) =======
+      try {
+        const movSnap = await getDocs(collection(db, "botellas", bottleId, "movimientos"));
+        const movs = movSnap.docs
+          .map(normalizeMovimiento)
+          .filter((m) => m && m.date && !isNaN(new Date(m.date).getTime()))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        setEntries(movs);
+      } catch (e) {
+        console.error("Analytics movimientos error:", e);
+      }
 
-      /* ======= catálogos: leer desde botellas/{bottleId} (NO desde users/orgs) ======= */
-      const catsSnap = await getDocs(
-        query(collection(db, "botellas", bottleId, "categories"), orderBy("name"))
-      );
-      const cats = catsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setCategories(cats);
+      // ======= catálogos: leer desde botellas/{bottleId} =======
+      let cats = categories;
+      try {
+        const catsSnap = await getDocs(
+          query(collection(db, "botellas", bottleId, "categories"), orderBy("name"))
+        );
+        cats = catsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setCategories(cats);
+      } catch (e) {
+        console.error("Analytics categories error:", e);
+      }
 
       const subs = [];
       const cons = [];
 
-      for (const c of cats) {
-        const subsSnap = await getDocs(
-          query(
-            collection(db, "botellas", bottleId, "categories", c.id, "subcategories"),
-            orderBy("name")
-          )
-        );
+      for (const c of cats || []) {
+        try {
+          let subsSnap;
+          try {
+            subsSnap = await getDocs(
+              query(
+                collection(db, "botellas", bottleId, "categories", c.id, "subcategories"),
+                orderBy("name")
+              )
+            );
+          } catch {
+            subsSnap = await getDocs(
+              collection(db, "botellas", bottleId, "categories", c.id, "subcategories")
+            );
+          }
 
-        const subsHere = subsSnap.docs.map((d) => ({ id: d.id, categoryId: c.id, ...d.data() }));
-        subs.push(...subsHere);
+          const subsHere = subsSnap.docs.map((d) => ({ id: d.id, categoryId: c.id, ...d.data() }));
+          subs.push(...subsHere);
 
-        for (const s of subsHere) {
-          const consSnap = await getDocs(
-            query(
-              collection(
-                db,
-                "botellas",
-                bottleId,
-                "categories",
-                c.id,
-                "subcategories",
-                s.id,
-                "concepts"
-              ),
-              orderBy("name")
-            )
-          );
+          for (const s of subsHere) {
+            try {
+              let consSnap;
+              try {
+                consSnap = await getDocs(
+                  query(
+                    collection(
+                      db,
+                      "botellas",
+                      bottleId,
+                      "categories",
+                      c.id,
+                      "subcategories",
+                      s.id,
+                      "concepts"
+                    ),
+                    orderBy("name")
+                  )
+                );
+              } catch {
+                consSnap = await getDocs(
+                  collection(
+                    db,
+                    "botellas",
+                    bottleId,
+                    "categories",
+                    c.id,
+                    "subcategories",
+                    s.id,
+                    "concepts"
+                  )
+                );
+              }
 
-          cons.push(
-            ...consSnap.docs.map((d) => ({
-              id: d.id,
-              categoryId: c.id,
-              subCategoryId: s.id,
-              ...d.data(),
-            }))
-          );
+              cons.push(
+                ...consSnap.docs.map((d) => ({
+                  id: d.id,
+                  categoryId: c.id,
+                  subCategoryId: s.id,
+                  ...d.data(),
+                }))
+              );
+            } catch (e) {
+              console.error("Analytics concepts error:", e);
+            }
+          }
+        } catch (e) {
+          console.error("Analytics subcategories error:", e);
         }
       }
 
       setSubCategories(subs);
       setConcepts(cons);
+
+      // ======= cuentas bancarias =======
+      try {
+        const bankSnap = await getDocs(
+          query(collection(db, "botellas", bottleId, "bankAccounts"), orderBy("name"))
+        );
+        setBankAccounts(bankSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        console.error("Analytics bankAccounts error:", e);
+      }
     }
 
     load();
@@ -544,16 +729,22 @@ export default function Analytics() {
     return m;
   }, [subCategories]);
 
+  const bankNameById = useMemo(() => {
+    const m = new Map();
+    bankAccounts.forEach((b) => m.set(b.id, b.name));
+    return m;
+  }, [bankAccounts]);
+
   const categoryIdByName = useMemo(() => {
     const m = new Map();
-    categories.forEach((c) => m.set((c.name || "").trim().toLowerCase(), c.id));
+    categories.forEach((c) => m.set(normKey(c.name), c.id));
     return m;
   }, [categories]);
 
   const subIdByCatIdAndName = useMemo(() => {
     const m = new Map();
     subCategories.forEach((s) => {
-      const key = `${s.categoryId}::${(s.name || "").trim().toLowerCase()}`;
+      const key = `${s.categoryId}::${normKey(s.name)}`;
       m.set(key, s.id);
     });
     return m;
@@ -562,31 +753,53 @@ export default function Analytics() {
   const conceptIdBySubIdAndName = useMemo(() => {
     const m = new Map();
     concepts.forEach((c) => {
-      const key = `${c.subCategoryId}::${(c.name || "").trim().toLowerCase()}`;
+      const key = `${c.subCategoryId}::${normKey(c.name)}`;
       m.set(key, c.id);
     });
     return m;
   }, [concepts]);
 
+  const bankIdByName = useMemo(() => {
+    const m = new Map();
+    bankAccounts.forEach((b) => m.set(normKey(b.name), b.id));
+    return m;
+  }, [bankAccounts]);
+
   function resolveIds(en) {
     let categoryId = en.categoryId || "";
     if (!categoryId && en.categoria) {
-      categoryId = categoryIdByName.get(en.categoria.trim().toLowerCase()) || "";
+      categoryId = categoryIdByName.get(normKey(en.categoria)) || "";
     }
 
     let subCategoryId = en.subCategoryId || "";
     if (!subCategoryId && categoryId && en.subcategoria) {
-      const key = `${categoryId}::${en.subcategoria.trim().toLowerCase()}`;
+      const key = `${categoryId}::${normKey(en.subcategoria)}`;
+      subCategoryId = subIdByCatIdAndName.get(key) || "";
+    }
+    // fallback: si no hay subcategoria, usa "General" si existe
+    if (!subCategoryId && categoryId) {
+      const key = `${categoryId}::${normKey("General")}`;
       subCategoryId = subIdByCatIdAndName.get(key) || "";
     }
 
     let conceptId = en.conceptId || "";
     if (!conceptId && subCategoryId && en.concepto) {
-      const key = `${subCategoryId}::${en.concepto.trim().toLowerCase()}`;
+      const key = `${subCategoryId}::${normKey(en.concepto)}`;
+      conceptId = conceptIdBySubIdAndName.get(key) || "";
+    }
+    // fallback: si no hay concepto, usa "General" si existe
+    if (!conceptId && subCategoryId) {
+      const key = `${subCategoryId}::${normKey("General")}`;
       conceptId = conceptIdBySubIdAndName.get(key) || "";
     }
 
-    return { ...en, categoryId, subCategoryId, conceptId };
+    // bankAccountId fallback por nombre si existe
+    let bankAccountId = en.bankAccountId || "";
+    if (!bankAccountId && en.cuentaBancaria) {
+      bankAccountId = bankIdByName.get(normKey(en.cuentaBancaria)) || "";
+    }
+
+    return { ...en, categoryId, subCategoryId, conceptId, bankAccountId };
   }
 
   const availableSubs = useMemo(() => {
@@ -607,6 +820,36 @@ export default function Analytics() {
     return concepts;
   }, [concepts, selectedSubs, selectedCats]);
 
+  // ✅ opciones dependientes para tablas
+  const subCategoriesForSelectedCategory = useMemo(() => {
+    if (!selectedCategoryId) return [];
+    return subCategories.filter((s) => s.categoryId === selectedCategoryId);
+  }, [subCategories, selectedCategoryId]);
+
+  const conceptsForSelectedCategory = useMemo(() => {
+    if (!selectedCategoryId) return [];
+    return concepts.filter((c) => c.categoryId === selectedCategoryId);
+  }, [concepts, selectedCategoryId]);
+
+  const conceptsForSelectedSub = useMemo(() => {
+    if (!selectedSubCategoryId) return [];
+    return concepts.filter((c) => c.subCategoryId === selectedSubCategoryId);
+  }, [concepts, selectedSubCategoryId]);
+
+  const resolvedEntries = useMemo(() => {
+    return entries.map(resolveIds);
+  }, [entries, categoryIdByName, subIdByCatIdAndName, conceptIdBySubIdAndName, bankIdByName]);
+
+  const bankAccountsForSelectedCategory = useMemo(() => {
+    if (!selectedCategoryId) return bankAccounts;
+    const set = new Set(
+      resolvedEntries
+        .filter((e) => e.categoryId === selectedCategoryId && e.bankAccountId)
+        .map((e) => e.bankAccountId)
+    );
+    return bankAccounts.filter((b) => set.has(b.id));
+  }, [bankAccounts, resolvedEntries, selectedCategoryId]);
+
   useEffect(() => {
     const subSet = new Set(availableSubs.map((s) => s.id));
     setSelectedSubs((prev) => prev.filter((id) => subSet.has(id)));
@@ -616,20 +859,56 @@ export default function Analytics() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCats, subCategories, concepts]);
 
+  // ✅ defaults para tablas (single-select)
+  useEffect(() => {
+    if (!selectedCategoryId && categories.length) {
+      setSelectedCategoryId(categories[0]?.id || "");
+    }
+  }, [categories.length, selectedCategoryId]);
+
+  useEffect(() => {
+    if (!selectedCategoryId) {
+      setSelectedSubCategoryId("");
+      setSelectedConceptId("");
+      setSelectedBankAccountId("");
+      return;
+    }
+    const subs = subCategoriesForSelectedCategory;
+    if (subs.length && !subs.some((s) => s.id === selectedSubCategoryId)) {
+      setSelectedSubCategoryId(subs[0].id);
+    }
+
+    const cons = conceptsForSelectedCategory;
+    if (cons.length && !cons.some((c) => c.id === selectedConceptId)) {
+      setSelectedConceptId(cons[0].id);
+    }
+
+    const banks = bankAccountsForSelectedCategory;
+    if (banks.length && !banks.some((b) => b.id === selectedBankAccountId)) {
+      setSelectedBankAccountId(banks[0].id);
+    }
+  }, [
+    selectedCategoryId,
+    subCategoriesForSelectedCategory,
+    conceptsForSelectedCategory,
+    bankAccountsForSelectedCategory,
+    selectedSubCategoryId,
+    selectedConceptId,
+    selectedBankAccountId,
+  ]);
+
   const filteredEntriesBase = useMemo(() => {
     const catSet = new Set(selectedCats);
     const subSet = new Set(selectedSubs);
     const conSet = new Set(selectedConcepts);
 
-    return entries
-      .map(resolveIds)
-      .filter((en) => {
+    return resolvedEntries.filter((en) => {
         if (catSet.size && !catSet.has(en.categoryId)) return false;
         if (subSet.size && !subSet.has(en.subCategoryId)) return false;
         if (conSet.size && !conSet.has(en.conceptId)) return false;
         return true;
       });
-  }, [entries, selectedCats, selectedSubs, selectedConcepts, categories, subCategories, concepts]);
+  }, [resolvedEntries, selectedCats, selectedSubs, selectedConcepts]);
 
   const availableYears = useMemo(() => {
     const ys = new Set();
@@ -690,6 +969,56 @@ export default function Analytics() {
 
     return rows;
   }, [filteredEntries, range, chartBuckets, yearsSpan]);
+
+  // ===== tablas por categoría/sub/concepto/cuenta =====
+  const entriesForCategory = useMemo(() => {
+    if (!selectedCategoryId) return [];
+    return resolvedEntries.filter((e) => e.categoryId === selectedCategoryId);
+  }, [resolvedEntries, selectedCategoryId]);
+
+  const entriesForSubCategory = useMemo(() => {
+    if (!selectedCategoryId || !selectedSubCategoryId) return [];
+    return resolvedEntries.filter(
+      (e) => e.categoryId === selectedCategoryId && e.subCategoryId === selectedSubCategoryId
+    );
+  }, [resolvedEntries, selectedCategoryId, selectedSubCategoryId]);
+
+  const entriesForConcept = useMemo(() => {
+    if (!selectedCategoryId || !selectedSubCategoryId || !selectedConceptId) return [];
+    return resolvedEntries.filter(
+      (e) =>
+        e.categoryId === selectedCategoryId &&
+        e.subCategoryId === selectedSubCategoryId &&
+        e.conceptId === selectedConceptId
+    );
+  }, [resolvedEntries, selectedCategoryId, selectedSubCategoryId, selectedConceptId]);
+
+  const entriesForBank = useMemo(() => {
+    if (!selectedBankAccountId) return [];
+    return resolvedEntries.filter((e) => e.bankAccountId === selectedBankAccountId);
+  }, [resolvedEntries, selectedBankAccountId]);
+
+  const groupedCategory = useMemo(
+    () => groupEntries(entriesForCategory, groupCatBy),
+    [entriesForCategory, groupCatBy]
+  );
+  const groupedSub = useMemo(
+    () => groupEntries(entriesForSubCategory, groupSubBy),
+    [entriesForSubCategory, groupSubBy]
+  );
+  const groupedConcept = useMemo(
+    () => groupEntries(entriesForConcept, groupConceptBy),
+    [entriesForConcept, groupConceptBy]
+  );
+  const groupedBank = useMemo(
+    () => groupEntries(entriesForBank, groupBankBy),
+    [entriesForBank, groupBankBy]
+  );
+
+  const totalsCategory = useMemo(() => totals(entriesForCategory), [entriesForCategory]);
+  const totalsSub = useMemo(() => totals(entriesForSubCategory), [entriesForSubCategory]);
+  const totalsConcept = useMemo(() => totals(entriesForConcept), [entriesForConcept]);
+  const totalsBank = useMemo(() => totals(entriesForBank), [entriesForBank]);
 
   const onSelectAllCats = () => setSelectedCats(categories.map((c) => c.id));
   const onSelectAllSubs = () => setSelectedSubs(availableSubs.map((s) => s.id));
@@ -797,6 +1126,9 @@ export default function Analytics() {
       </div>
 
       <div className="rounded-2xl border bg-white p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-base font-semibold text-slate-800">Filtros</div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           <div className={showYearPicker ? "md:col-span-6" : "md:col-span-5"}>
             <label className="block text-sm text-slate-600 mb-2">Escala de tiempo</label>
@@ -901,6 +1233,8 @@ export default function Analytics() {
         </div>
       </div>
 
+      <div className="mb-4 text-base font-semibold text-white/90">Gráficas</div>
+
       <ChartCard title="Seleccionados — Ingreso vs Gasto">
         <TimeSeriesChart
           data={ig}
@@ -935,13 +1269,13 @@ export default function Analytics() {
                 <tr key={r.bucket} className="border-b last:border-0">
                   <td className="py-2 px-3 whitespace-nowrap">{r.bucket}</td>
                   <td className="py-2 px-3 text-right text-green-600">
-                    {Number(r.ingreso || 0).toLocaleString("es-MX")}
+                    {fmtMoney(r.ingreso || 0)}
                   </td>
                   <td className="py-2 px-3 text-right text-red-600">
-                    {Number(r.gasto || 0).toLocaleString("es-MX")}
+                    {fmtMoney(r.gasto || 0)}
                   </td>
                   <td className="py-2 px-3 text-right font-medium">
-                    {Number(r.neto || 0).toLocaleString("es-MX")}
+                    {fmtMoney(r.neto || 0)}
                   </td>
                 </tr>
               ))}
@@ -961,6 +1295,350 @@ export default function Analytics() {
           Puedes hacer scroll para ver más periodos (años/meses) según el rango seleccionado.
         </div>
       </div>
+
+      {/* ===================== TABLAS DETALLADAS ===================== */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-base font-semibold text-white/90">Tablas detalladas</div>
+        <button
+          type="button"
+          onClick={() => setShowDetailedTables((v) => !v)}
+          className="rounded-xl border border-white/40 px-3 py-1 text-sm text-white/90 hover:bg-white/10"
+        >
+          {showDetailedTables ? "Ocultar tablas" : "Mostrar tablas"}
+        </button>
+      </div>
+
+      {showDetailedTables && (
+        <>
+          <div className="grid md:grid-cols-2 gap-6">
+        <div className="rounded-2xl border bg-white p-4">
+          <h2 className="text-lg font-semibold mb-3">Categorías</h2>
+
+          <div className="flex flex-wrap items-end gap-3 mb-3">
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-xs text-slate-500 mb-1">Categoría</label>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={selectedCategoryId}
+                onChange={(e) => setSelectedCategoryId(e.target.value)}
+                disabled={!categories.length}
+              >
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <select
+                className="rounded-xl border px-3 py-2"
+                value={groupCatBy}
+                onChange={(e) => setGroupCatBy(e.target.value)}
+              >
+                <option value="day">Día</option>
+                <option value="week">Semana</option>
+                <option value="month">Mes</option>
+                <option value="year">Año</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 text-sm mb-2">
+            <div>
+              <b>Ingreso total:</b>{" "}
+              <span className="text-green-600">{fmtMoney(totalsCategory.ingreso)}</span>
+            </div>
+            <div>
+              <b>Gasto total:</b>{" "}
+              <span className="text-red-600">{fmtMoney(totalsCategory.gasto)}</span>
+            </div>
+            <div>
+              <b>Neto:</b>{" "}
+              <span className="font-semibold">{fmtMoney(totalsCategory.neto)}</span>
+            </div>
+          </div>
+
+          <EntriesList list={entriesForCategory} />
+
+          <table className="w-full text-sm mt-4">
+            <thead>
+              <tr className="text-slate-600 border-b">
+                <th className="text-left py-2">Categoría</th>
+                <th className="text-right">Ingreso</th>
+                <th className="text-right">Gasto</th>
+                <th className="text-right">Neto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupedCategory.map((r) => (
+                <tr key={r.bucket} className="border-b last:border-0">
+                  <td className="py-2">{r.bucket}</td>
+                  <td className="text-right text-green-600">{fmtMoney(r.ingreso)}</td>
+                  <td className="text-right text-red-600">{fmtMoney(r.gasto)}</td>
+                  <td className="text-right font-medium">{fmtMoney(r.neto)}</td>
+                </tr>
+              ))}
+              {groupedCategory.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-6 text-center text-slate-500">
+                    Sin entradas.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-4">
+          <h2 className="text-lg font-semibold mb-3">Sub-categorías</h2>
+
+          <div className="flex flex-wrap items-end gap-3 mb-3">
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-xs text-slate-500 mb-1">Sub-categoría</label>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={selectedSubCategoryId}
+                onChange={(e) => setSelectedSubCategoryId(e.target.value)}
+                disabled={!subCategoriesForSelectedCategory.length}
+              >
+                {subCategoriesForSelectedCategory.map((sc) => (
+                  <option key={sc.id} value={sc.id}>
+                    {sc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <select
+                className="rounded-xl border px-3 py-2"
+                value={groupSubBy}
+                onChange={(e) => setGroupSubBy(e.target.value)}
+              >
+                <option value="day">Día</option>
+                <option value="week">Semana</option>
+                <option value="month">Mes</option>
+                <option value="year">Año</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 text-sm mb-2">
+            <div>
+              <b>Ingreso total:</b>{" "}
+              <span className="text-green-600">{fmtMoney(totalsSub.ingreso)}</span>
+            </div>
+            <div>
+              <b>Gasto total:</b>{" "}
+              <span className="text-red-600">{fmtMoney(totalsSub.gasto)}</span>
+            </div>
+            <div>
+              <b>Neto:</b>{" "}
+              <span className="font-semibold">{fmtMoney(totalsSub.neto)}</span>
+            </div>
+          </div>
+
+          <EntriesList list={entriesForSubCategory} />
+
+          <table className="w-full text-sm mt-4">
+            <thead>
+              <tr className="text-slate-600 border-b">
+                <th className="text-left py-2">Sub-categoría</th>
+                <th className="text-right">Ingreso</th>
+                <th className="text-right">Gasto</th>
+                <th className="text-right">Neto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupedSub.map((r) => (
+                <tr key={r.bucket} className="border-b last:border-0">
+                  <td className="py-2">{r.bucket}</td>
+                  <td className="text-right text-green-600">{fmtMoney(r.ingreso)}</td>
+                  <td className="text-right text-red-600">{fmtMoney(r.gasto)}</td>
+                  <td className="text-right font-medium">{fmtMoney(r.neto)}</td>
+                </tr>
+              ))}
+              {groupedSub.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-6 text-center text-slate-500">
+                    Sin entradas.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+          <div className="grid md:grid-cols-2 gap-6 mt-6">
+        <div className="rounded-2xl border bg-white p-4">
+          <h2 className="text-lg font-semibold mb-3">Conceptos</h2>
+
+          <div className="flex flex-wrap items-end gap-3 mb-3">
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-xs text-slate-500 mb-1">Concepto</label>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={selectedConceptId}
+                onChange={(e) => setSelectedConceptId(e.target.value)}
+                disabled={!conceptsForSelectedSub.length && !conceptsForSelectedCategory.length}
+              >
+                {(conceptsForSelectedSub.length ? conceptsForSelectedSub : conceptsForSelectedCategory).map((cn) => (
+                  <option key={cn.id} value={cn.id}>
+                    {cn.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <select
+                className="rounded-xl border px-3 py-2"
+                value={groupConceptBy}
+                onChange={(e) => setGroupConceptBy(e.target.value)}
+              >
+                <option value="day">Día</option>
+                <option value="week">Semana</option>
+                <option value="month">Mes</option>
+                <option value="year">Año</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 text-sm mb-2">
+            <div>
+              <b>Ingreso total:</b>{" "}
+              <span className="text-green-600">{fmtMoney(totalsConcept.ingreso)}</span>
+            </div>
+            <div>
+              <b>Gasto total:</b>{" "}
+              <span className="text-red-600">{fmtMoney(totalsConcept.gasto)}</span>
+            </div>
+            <div>
+              <b>Neto:</b>{" "}
+              <span className="font-semibold">{fmtMoney(totalsConcept.neto)}</span>
+            </div>
+          </div>
+
+          <EntriesList list={entriesForConcept} />
+
+          <table className="w-full text-sm mt-4">
+            <thead>
+              <tr className="text-slate-600 border-b">
+                <th className="text-left py-2">Concepto</th>
+                <th className="text-right">Ingreso</th>
+                <th className="text-right">Gasto</th>
+                <th className="text-right">Neto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupedConcept.map((r) => (
+                <tr key={r.bucket} className="border-b last:border-0">
+                  <td className="py-2">{r.bucket}</td>
+                  <td className="text-right text-green-600">{fmtMoney(r.ingreso)}</td>
+                  <td className="text-right text-red-600">{fmtMoney(r.gasto)}</td>
+                  <td className="text-right font-medium">{fmtMoney(r.neto)}</td>
+                </tr>
+              ))}
+              {groupedConcept.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-6 text-center text-slate-500">
+                    Sin entradas.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-4">
+          <h2 className="text-lg font-semibold mb-3">Cuentas bancarias</h2>
+
+          <div className="flex flex-wrap items-end gap-3 mb-3">
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-xs text-slate-500 mb-1">Cuenta bancaria</label>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={selectedBankAccountId}
+                onChange={(e) => setSelectedBankAccountId(e.target.value)}
+                disabled={!bankAccountsForSelectedCategory.length}
+              >
+                {bankAccountsForSelectedCategory.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <select
+                className="rounded-xl border px-3 py-2"
+                value={groupBankBy}
+                onChange={(e) => setGroupBankBy(e.target.value)}
+              >
+                <option value="day">Día</option>
+                <option value="week">Semana</option>
+                <option value="month">Mes</option>
+                <option value="year">Año</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 text-sm mb-2">
+            <div>
+              <b>Ingreso total:</b>{" "}
+              <span className="text-green-600">{fmtMoney(totalsBank.ingreso)}</span>
+            </div>
+            <div>
+              <b>Gasto total:</b>{" "}
+              <span className="text-red-600">{fmtMoney(totalsBank.gasto)}</span>
+            </div>
+            <div>
+              <b>Neto:</b>{" "}
+              <span className="font-semibold">{fmtMoney(totalsBank.neto)}</span>
+            </div>
+          </div>
+
+          <EntriesList list={entriesForBank} />
+
+          <table className="w-full text-sm mt-4">
+            <thead>
+              <tr className="text-slate-600 border-b">
+                <th className="text-left py-2">Cuenta</th>
+                <th className="text-right">Ingreso</th>
+                <th className="text-right">Gasto</th>
+                <th className="text-right">Neto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupedBank.map((r) => (
+                <tr key={r.bucket} className="border-b last:border-0">
+                  <td className="py-2">{r.bucket}</td>
+                  <td className="text-right text-green-600">{fmtMoney(r.ingreso)}</td>
+                  <td className="text-right text-red-600">{fmtMoney(r.gasto)}</td>
+                  <td className="text-right font-medium">{fmtMoney(r.neto)}</td>
+                </tr>
+              ))}
+              {groupedBank.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-6 text-center text-slate-500">
+                    Sin entradas.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+          </div>
+        </>
+      )}
 
       <div className="rounded-2xl border bg-white p-5 mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">

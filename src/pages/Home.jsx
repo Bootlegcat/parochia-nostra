@@ -146,12 +146,12 @@ export default function Home() {
 
           {/* ✅ Cambiar organización (ahora al selector real) */}
           <Link
-            to="/organizaciones"
+            to="/especiales"
             className="
               absolute left-4 bottom-3 text-white font-medium text-sm
               underline-offset-4 hover:underline transition
             "
-            title="Regresar a selector"
+            title="Regresar a inicio"
           >
             Cambiar organización
           </Link>

@@ -304,6 +304,7 @@ export default function Events() {
   const [name, setName] = useState("");
   const [categories, setCategories] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [catType, setCatType] = useState("ingreso"); // ingreso | egreso
 
   const [subName, setSubName] = useState("");
   const [subCategories, setSubCategories] = useState([]);
@@ -344,6 +345,7 @@ export default function Events() {
   const [busyConceptId, setBusyConceptId] = useState("");
   const [busyBankId, setBusyBankId] = useState("");
   const [error, setError] = useState("");
+  const showAnalytics = false;
 
   useEffect(() => {
     const auth = getAuth();
@@ -561,6 +563,9 @@ export default function Events() {
 
       docs.sort(sortByDateDesc);
       setAllEntries(docs);
+    } catch (e) {
+      console.error("Events loadAllEntries error:", e);
+      setAllEntries([]);
     } finally {
       setEntriesLoading(false);
     }
@@ -568,11 +573,16 @@ export default function Events() {
 
   async function loadCategories() {
     if (!orgRefs) return;
-    const snap = await getDocs(query(orgRefs.categoriesCol, orderBy("name")));
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setCategories(list);
-    setBootstrapInfo((s) => ({ ...s, catCount: list.length }));
-    if (!selectedCategoryId && list[0]?.id) setSelectedCategoryId(list[0].id);
+    try {
+      const snap = await getDocs(query(orgRefs.categoriesCol, orderBy("name")));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setCategories(list);
+      setBootstrapInfo((s) => ({ ...s, catCount: list.length }));
+      if (!selectedCategoryId && list[0]?.id) setSelectedCategoryId(list[0].id);
+    } catch (e) {
+      console.error("Events loadCategories error:", e);
+      setCategories([]);
+    }
   }
 
   async function loadSubCategories(categoryId) {
@@ -580,10 +590,20 @@ export default function Events() {
       setSubCategories([]);
       return;
     }
-    const snap = await getDocs(query(orgRefs.subcategoriesCol(categoryId), orderBy("name")));
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setSubCategories(list);
-    if (!selectedSubCategoryId && list[0]?.id) setSelectedSubCategoryId(list[0].id);
+    try {
+      let snap;
+      try {
+        snap = await getDocs(query(orgRefs.subcategoriesCol(categoryId), orderBy("name")));
+      } catch {
+        snap = await getDocs(orgRefs.subcategoriesCol(categoryId));
+      }
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setSubCategories(list);
+      if (!selectedSubCategoryId && list[0]?.id) setSelectedSubCategoryId(list[0].id);
+    } catch (e) {
+      console.error("Events loadSubCategories error:", e);
+      setSubCategories([]);
+    }
   }
 
   async function loadConcepts(categoryId, subCategoryId) {
@@ -591,18 +611,33 @@ export default function Events() {
       setConcepts([]);
       return;
     }
-    const snap = await getDocs(query(orgRefs.conceptsCol(categoryId, subCategoryId), orderBy("name")));
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setConcepts(list);
-    if (!selectedConceptId && list[0]?.id) setSelectedConceptId(list[0].id);
+    try {
+      let snap;
+      try {
+        snap = await getDocs(query(orgRefs.conceptsCol(categoryId, subCategoryId), orderBy("name")));
+      } catch {
+        snap = await getDocs(orgRefs.conceptsCol(categoryId, subCategoryId));
+      }
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setConcepts(list);
+      if (!selectedConceptId && list[0]?.id) setSelectedConceptId(list[0].id);
+    } catch (e) {
+      console.error("Events loadConcepts error:", e);
+      setConcepts([]);
+    }
   }
 
   async function loadBankAccounts() {
     if (!orgRefs) return;
-    const snap = await getDocs(query(orgRefs.bankAccountsCol, orderBy("name")));
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setBankAccounts(list);
-    if (!selectedBankAccountId && list[0]?.id) setSelectedBankAccountId(list[0].id);
+    try {
+      const snap = await getDocs(query(orgRefs.bankAccountsCol, orderBy("name")));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setBankAccounts(list);
+      if (!selectedBankAccountId && list[0]?.id) setSelectedBankAccountId(list[0].id);
+    } catch (e) {
+      console.error("Events loadBankAccounts error:", e);
+      setBankAccounts([]);
+    }
   }
 
   function movsHaveCatalogFields(m) {
@@ -850,6 +885,21 @@ export default function Events() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgRefs, canEdit]);
 
+  const categoriesForType = useMemo(() => {
+    return categories.filter((c) => (c.tipo || "").toLowerCase() === catType);
+  }, [categories, catType]);
+
+  useEffect(() => {
+    if (catalogMode === "recent-only") return;
+    if (!categoriesForType.length) {
+      setSelectedCategoryId("");
+      return;
+    }
+    if (!categoriesForType.some((c) => c.id === selectedCategoryId)) {
+      setSelectedCategoryId(categoriesForType[0]?.id || "");
+    }
+  }, [catType, categoriesForType, catalogMode, selectedCategoryId]);
+
   // ✅ derivar lists desde allEntries (sin query compuesta)
   useEffect(() => {
     if (!canEdit && (catalogMode === "recent-only" || selectedCategoryId === "__recent__")) {
@@ -975,7 +1025,11 @@ export default function Events() {
 
     try {
       setSaving(true);
-      const ref = await addDoc(orgRefs.categoriesCol, { name: name.trim(), createdAt: serverTimestamp() });
+      const ref = await addDoc(orgRefs.categoriesCol, {
+        name: name.trim(),
+        tipo: catType,
+        createdAt: serverTimestamp(),
+      });
       setName("");
       await loadCategories();
       setSelectedCategoryId(ref.id);
@@ -1213,9 +1267,32 @@ export default function Events() {
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
       {/* ===================== FILA 1: CATEGORÍAS ===================== */}
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className={"grid gap-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
         <div className="rounded-2xl border bg-white p-4">
           <h2 className="text-lg font-semibold mb-3">Categorías</h2>
+
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              className={
+                "rounded-xl border px-3 py-1 text-sm " +
+                (catType === "ingreso" ? "bg-slate-900 text-white" : "hover:bg-slate-50")
+              }
+              onClick={() => setCatType("ingreso")}
+            >
+              Ingresos
+            </button>
+            <button
+              type="button"
+              className={
+                "rounded-xl border px-3 py-1 text-sm " +
+                (catType === "egreso" ? "bg-slate-900 text-white" : "hover:bg-slate-50")
+              }
+              onClick={() => setCatType("egreso")}
+            >
+              Egresos
+            </button>
+          </div>
 
           <form onSubmit={onCreateCategory} className="flex gap-3 mb-4">
             <input
@@ -1235,7 +1312,7 @@ export default function Events() {
           </form>
 
           <ul className="space-y-2">
-            {categories.map((cat) => (
+            {categoriesForType.map((cat) => (
               <li key={cat.id} className="rounded-xl border p-3 flex items-center justify-between">
                 <button
                   className={"font-medium underline " + (selectedCategoryId === cat.id ? "text-black" : "text-slate-700")}
@@ -1256,10 +1333,11 @@ export default function Events() {
                 </button>
               </li>
             ))}
-            {categories.length === 0 && <li className="text-sm text-slate-500">Aún no hay categorías.</li>}
+            {categoriesForType.length === 0 && <li className="text-sm text-slate-500">Aún no hay categorías.</li>}
           </ul>
         </div>
 
+        {showAnalytics && (
         <div className="rounded-2xl border bg-white p-4">
           <h2 className="text-lg font-semibold mb-3">Análisis de categorías</h2>
 
@@ -1270,9 +1348,9 @@ export default function Events() {
                 className="w-full rounded-xl border px-3 py-2"
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                disabled={!categories.length}
+                disabled={!categoriesForType.length}
               >
-                {categories.map((cat) => (
+                {categoriesForType.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
                   </option>
@@ -1339,10 +1417,11 @@ export default function Events() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* ===================== FILA 2: SUB-CATEGORÍAS ===================== */}
-      <div className="grid md:grid-cols-2 gap-6 mt-6">
+      <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
         <div className="rounded-2xl border bg-white p-4">
           <h2 className="text-lg font-semibold mb-3">Sub-categorías</h2>
 
@@ -1369,9 +1448,9 @@ export default function Events() {
               className="w-full rounded-xl border px-3 py-2"
               value={selectedCategoryId}
               onChange={(e) => setSelectedCategoryId(e.target.value)}
-              disabled={!categories.length}
+              disabled={!categoriesForType.length}
             >
-              {categories.map((cat) => (
+              {categoriesForType.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
                 </option>
@@ -1405,6 +1484,7 @@ export default function Events() {
           </ul>
         </div>
 
+        {showAnalytics && (
         <div className="rounded-2xl border bg-white p-4">
           <h2 className="text-lg font-semibold mb-3">Análisis de sub-categorías</h2>
 
@@ -1482,10 +1562,11 @@ export default function Events() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* ===================== FILA 3: CONCEPTOS ===================== */}
-      <div className="grid md:grid-cols-2 gap-6 mt-6">
+      <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
         <div className="rounded-2xl border bg-white p-4">
           <h2 className="text-lg font-semibold mb-3">Conceptos</h2>
 
@@ -1513,9 +1594,9 @@ export default function Events() {
                 className="w-full rounded-xl border px-3 py-2"
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                disabled={!categories.length}
+                disabled={!categoriesForType.length}
               >
-                {categories.map((cat) => (
+                {categoriesForType.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
                   </option>
@@ -1566,6 +1647,7 @@ export default function Events() {
           </ul>
         </div>
 
+        {showAnalytics && (
         <div className="rounded-2xl border bg-white p-4">
           <h2 className="text-lg font-semibold mb-3">Análisis de conceptos</h2>
 
@@ -1645,10 +1727,11 @@ export default function Events() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* ===================== FILA 4: CUENTAS BANCARIAS ===================== */}
-      <div className="grid md:grid-cols-2 gap-6 mt-6">
+      <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
         <div className="rounded-2xl border bg-white p-4">
           <h2 className="text-lg font-semibold mb-3">Cuentas bancarias</h2>
 
@@ -1724,6 +1807,7 @@ export default function Events() {
           </ul>
         </div>
 
+        {showAnalytics && (
         <div className="rounded-2xl border bg-white p-4">
           <h2 className="text-lg font-semibold mb-3">Análisis de cuentas bancarias</h2>
 
@@ -1803,6 +1887,7 @@ export default function Events() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       <div className="h-10" />

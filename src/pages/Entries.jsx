@@ -161,9 +161,7 @@ export default function Entries() {
 
   const bottleId = useMemo(() => {
     if (!orgId) return "";
-    const mapped = BOTTLE_ID_BY_ORG[orgId];
-    if (!mapped) throw new Error(`Org desconocida: ${orgId}`);
-    return mapped;
+    return BOTTLE_ID_BY_ORG[orgId] || orgId;
   }, [orgId]);
 
   // ✅ Role
@@ -237,10 +235,7 @@ export default function Entries() {
   const [conceptId, setConceptId] = useState("");
   const [bankAccountId, setBankAccountId] = useState("");
 
-  // modo texto (fallback)
-  const [categoryText, setCategoryText] = useState("");
-  const [subCategoryText, setSubCategoryText] = useState("");
-  const [conceptText, setConceptText] = useState("");
+  // modo texto (fallback solo para cuenta bancaria)
   const [bankAccountText, setBankAccountText] = useState("");
 
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
@@ -286,28 +281,54 @@ export default function Entries() {
     return m;
   }, [bankAccounts]);
 
-  const hasCatalogs = useMemo(() => {
-    return categories.length > 0 || bankAccounts.length > 0;
-  }, [categories.length, bankAccounts.length]);
+  const categoryType = type === "income" ? "ingreso" : "egreso";
+
+  const categoriesForType = useMemo(() => {
+    return categories.filter((c) => (c.tipo || "").toLowerCase() === categoryType);
+  }, [categories, categoryType]);
+
+  const hasCategoryCatalogs = useMemo(() => {
+    return categoriesForType.length > 0;
+  }, [categoriesForType.length]);
 
   async function loadCatalogs() {
     if (!orgRefs) return;
-
-    const catSnap = await getDocs(query(orgRefs.categoriesCol, orderBy("name")));
-    const cats = catSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    try {
+      const catSnap = await getDocs(query(orgRefs.categoriesCol, orderBy("name")));
+      const cats = catSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     setCategories(cats);
     if (!categoryId && cats[0]?.id) setCategoryId(cats[0].id);
 
-    const bankSnap = await getDocs(query(orgRefs.bankAccountsCol, orderBy("name")));
-    const banks = bankSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setBankAccounts(banks);
-    if (!bankAccountId && banks[0]?.id) setBankAccountId(banks[0].id);
+      const bankSnap = await getDocs(query(orgRefs.bankAccountsCol, orderBy("name")));
+      const banks = bankSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setBankAccounts(banks);
+      if (!bankAccountId && banks[0]?.id) setBankAccountId(banks[0].id);
+    } catch (e) {
+      console.error("Entries loadCatalogs error:", e);
+      setCategories([]);
+      setBankAccounts([]);
+    }
   }
 
   useEffect(() => {
     loadCatalogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgRefs]);
+
+  useEffect(() => {
+    if (!categoriesForType.length) {
+      setCategoryId("");
+      setSubCategoryId("");
+      setConceptId("");
+      return;
+    }
+    if (!categoriesForType.some((c) => c.id === categoryId)) {
+      setCategoryId(categoriesForType[0]?.id || "");
+      setSubCategoryId("");
+      setConceptId("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryType, categoriesForType.length]);
 
   // sub-categorías
   useEffect(() => {
@@ -319,12 +340,25 @@ export default function Entries() {
         setConceptId("");
         return;
       }
-      const seSnap = await getDocs(query(orgRefs.subcategoriesCol(categoryId), orderBy("name")));
-      const subs = seSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setSubCategories(subs);
-      setSubCategoryId(subs[0]?.id ?? "");
-      setConcepts([]);
-      setConceptId("");
+      try {
+        let seSnap;
+      try {
+        seSnap = await getDocs(query(orgRefs.subcategoriesCol(categoryId), orderBy("name")));
+        } catch {
+          seSnap = await getDocs(orgRefs.subcategoriesCol(categoryId));
+        }
+        const subs = seSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setSubCategories(subs);
+        setSubCategoryId(subs[0]?.id ?? "");
+        setConcepts([]);
+        setConceptId("");
+      } catch (e) {
+        console.error("Entries loadSubCategories error:", e);
+        setSubCategories([]);
+        setSubCategoryId("");
+        setConcepts([]);
+        setConceptId("");
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId, orgRefs]);
@@ -337,12 +371,23 @@ export default function Entries() {
         setConceptId("");
         return;
       }
-      const cSnap = await getDocs(
-        query(orgRefs.conceptsCol(categoryId, subCategoryId), orderBy("name"))
-      );
-      const cons = cSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setConcepts(cons);
-      setConceptId(cons[0]?.id ?? "");
+      try {
+        let cSnap;
+        try {
+          cSnap = await getDocs(
+            query(orgRefs.conceptsCol(categoryId, subCategoryId), orderBy("name"))
+          );
+        } catch {
+          cSnap = await getDocs(orgRefs.conceptsCol(categoryId, subCategoryId));
+        }
+        const cons = cSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setConcepts(cons);
+        setConceptId(cons[0]?.id ?? "");
+      } catch (e) {
+        console.error("Entries loadConcepts error:", e);
+        setConcepts([]);
+        setConceptId("");
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subCategoryId, categoryId, orgRefs]);
@@ -478,12 +523,18 @@ export default function Entries() {
     if (!amt || amt <= 0) return setError("El monto debe ser mayor que 0.");
     if (!date) return setError("La fecha es obligatoria.");
 
-    const categoriaFinal = hasCatalogs ? categoryNameById.get(categoryId) || "" : categoryText.trim();
-    const subcategoriaFinal = hasCatalogs
-      ? subCategoryNameById.get(subCategoryId) || ""
-      : subCategoryText.trim();
-    const conceptoFinal = hasCatalogs ? conceptNameById.get(conceptId) || "" : conceptText.trim();
-    const cuentaFinal = hasCatalogs ? bankNameById.get(bankAccountId) || "" : bankAccountText.trim();
+    if (!hasCategoryCatalogs) {
+      return setError(
+        `No hay categorías de ${categoryType}. Asigna el tipo a las categorías para poder registrar.`
+      );
+    }
+
+    const categoriaFinal = categoryNameById.get(categoryId) || "";
+    const subcategoriaFinal = subCategoryNameById.get(subCategoryId) || "";
+    const conceptoFinal = conceptNameById.get(conceptId) || "";
+    const cuentaFinal = bankAccounts.length > 0
+      ? bankNameById.get(bankAccountId) || ""
+      : bankAccountText.trim();
 
     if (!cuentaFinal) return setError("La cuenta bancaria es obligatoria.");
     if (!categoriaFinal) return setError("La categoría es obligatoria.");
@@ -514,10 +565,10 @@ export default function Entries() {
         bankAccount: cuentaFinal,
 
         // ids (para que “General” no se mezcle con otros “General”)
-        categoryId: hasCatalogs ? (categoryId || "") : "",
-        subCategoryId: hasCatalogs ? (subCategoryId || "") : "",
-        conceptId: hasCatalogs ? (conceptId || "") : "",
-        bankAccountId: hasCatalogs ? (bankAccountId || "") : "",
+        categoryId: hasCategoryCatalogs ? (categoryId || "") : "",
+        subCategoryId: hasCategoryCatalogs ? (subCategoryId || "") : "",
+        conceptId: hasCategoryCatalogs ? (conceptId || "") : "",
+        bankAccountId: bankAccounts.length > 0 ? (bankAccountId || "") : "",
 
         paymentMethod: paymentMethod || "",
         beneficiary: beneficiary.trim() || "",
@@ -670,7 +721,7 @@ export default function Entries() {
           </div>
         </div>
 
-        {categories.length > 0 ? (
+        {categoriesForType.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Categoría</label>
@@ -682,7 +733,7 @@ export default function Entries() {
                 title={!canEdit ? "Solo editor/admin" : ""}
               >
                 <option value="">Selecciona…</option>
-                {categories.map((c) => (
+                {categoriesForType.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -730,36 +781,24 @@ export default function Entries() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Categoría</label>
-              <input
-                className="w-full rounded-xl border px-3 py-2"
-                value={categoryText}
-                onChange={(e) => setCategoryText(e.target.value)}
-                placeholder='Ej. "Gastos Parroquiales"'
-                disabled={!canEdit}
-                title={!canEdit ? "Solo editor/admin" : ""}
-              />
+              <select className="w-full rounded-xl border px-3 py-2" disabled>
+                <option>No hay categorías de {categoryType}</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Sub-categoría</label>
-              <input
-                className="w-full rounded-xl border px-3 py-2"
-                value={subCategoryText}
-                onChange={(e) => setSubCategoryText(e.target.value)}
-                placeholder='Ej. "Gastos Parroquiales varios"'
-                disabled={!canEdit}
-                title={!canEdit ? "Solo editor/admin" : ""}
-              />
+              <select className="w-full rounded-xl border px-3 py-2" disabled>
+                <option>Selecciona una categoría</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Concepto</label>
-              <input
-                className="w-full rounded-xl border px-3 py-2"
-                value={conceptText}
-                onChange={(e) => setConceptText(e.target.value)}
-                placeholder='Ej. "constancia de pláticas pre-bautismales"'
-                disabled={!canEdit}
-                title={!canEdit ? "Solo editor/admin" : ""}
-              />
+              <select className="w-full rounded-xl border px-3 py-2" disabled>
+                <option>Selecciona una sub-categoría</option>
+              </select>
+            </div>
+            <div className="md:col-span-3 text-xs text-slate-500">
+              No hay categorías de {categoryType}. Usa el script de backfill para asignar el tipo.
             </div>
           </div>
         )}

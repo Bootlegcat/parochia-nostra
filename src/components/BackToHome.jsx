@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 export default function BackToHome({ className = "", to }) {
   const { orgId } = useParams();
   // Destino por defecto según contexto
-  const href = to ?? (orgId ? `/org/${orgId}/home` : "/org-select");
+  const href = to ?? (orgId ? `/org/${orgId}/home` : "/organizaciones");
 
   return (
     <Link

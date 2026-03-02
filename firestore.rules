@@ -1,8 +1,218 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberPath(bottleId, uid) {
+      return /databases/$(database)/documents/botellas/$(bottleId)/members/$(uid);
+    }
+
+    function isMember(bottleId) {
+      return signedIn() && exists(memberPath(bottleId, request.auth.uid));
+    }
+
+    function isAdmin(bottleId) {
+      return signedIn()
+        && exists(memberPath(bottleId, request.auth.uid))
+        && get(memberPath(bottleId, request.auth.uid)).data.role == "admin";
+    }
+
+    // ---------- INVITES helpers ----------
+    // sin lower/trim para evitar warnings en rules
+    function normEmail(s) {
+      return s;
+    }
+
+    function inviteByIdPath(bottleId, inviteId) {
+      return /databases/$(database)/documents/botellas/$(bottleId)/invites/$(inviteId);
+    }
+
+    function inviteTargetsMe(bottleId, inviteId) {
+      return signedIn()
+        && request.auth.token.email != null
+        && exists(inviteByIdPath(bottleId, inviteId))
+        && normEmail(get(inviteByIdPath(bottleId, inviteId)).data.email)
+           == normEmail(request.auth.token.email)
+        && (get(inviteByIdPath(bottleId, inviteId)).data.used != true);
+    }
+
+    // ---------- Botellas personales ----------
+    function bottleDocPath(bottleId) {
+      return /databases/$(database)/documents/botellas/$(bottleId);
+    }
+
+    function bottleExists(bottleId) {
+      return exists(bottleDocPath(bottleId));
+    }
+
+    function isOwner(bottleId) {
+      return signedIn()
+        && bottleExists(bottleId)
+        && get(bottleDocPath(bottleId)).data.ownerUid == request.auth.uid;
+    }
+
+    // ---------- Usuarios ----------
+    match /users/{uid} {
+      allow read, create, update, delete: if signedIn() && uid == request.auth.uid;
+    }
+
+    // =====================================================
+    // INVITACIONES GLOBALES POR CÓDIGO (si las usas)
+    // =====================================================
+    match /invitesGlobal/{code} {
+      allow read: if signedIn()
+        && resource.data.bottleId is string
+        && (
+          isAdmin(resource.data.bottleId)
+          || (
+            request.auth.token.email != null
+            && normEmail(resource.data.email)
+               == normEmail(request.auth.token.email)
+          )
+        );
+
+      allow create: if signedIn()
+        && request.resource.data.bottleId is string
+        && isAdmin(request.resource.data.bottleId)
+        && request.resource.data.email is string
+        && request.resource.data.used == false;
+
+      allow update: if signedIn()
+        && resource.data.bottleId is string
+        && (
+          isAdmin(resource.data.bottleId)
+          || (
+            request.auth.token.email != null
+            && normEmail(resource.data.email)
+               == normEmail(request.auth.token.email)
+            && resource.data.used != true
+            && request.resource.data.used == true
+            && request.resource.data.email == resource.data.email
+            && request.resource.data.bottleId == resource.data.bottleId
+            && request.resource.data.role == resource.data.role
+          )
+        );
+
+      allow delete: if signedIn()
+        && resource.data.bottleId is string
+        && isAdmin(resource.data.bottleId);
+    }
+
+    // =====================================================
+    // BOTELLAS
+    // =====================================================
+    match /botellas/{bottleId} {
+      allow read: if isMember(bottleId);
+      allow create: if signedIn();
+      allow update, delete: if isAdmin(bottleId);
+
+      match /invites/{inviteId} {
+        allow read, create, delete: if isAdmin(bottleId);
+        allow update: if isAdmin(bottleId)
+          || (
+            signedIn()
+            && request.auth.token.email != null
+            && normEmail(resource.data.email)
+               == normEmail(request.auth.token.email)
+            && resource.data.used != true
+            && request.resource.data.used == true
+            && request.resource.data.email == resource.data.email
+            && request.resource.data.role == resource.data.role
+          );
+      }
+
+      match /members/{uid} {
+        allow read: if isMember(bottleId) || (signedIn() && uid == request.auth.uid);
+
+        allow create: if
+          isAdmin(bottleId)
+          || (
+            signedIn()
+            && uid == request.auth.uid
+            && !exists(memberPath(bottleId, uid))
+            && request.auth.token.email != null
+            && request.resource.data.inviteId is string
+            && inviteTargetsMe(bottleId, request.resource.data.inviteId)
+            && request.resource.data.role == "viewer"
+            && request.resource.data.email is string
+            && normEmail(request.resource.data.email)
+               == normEmail(request.auth.token.email)
+          )
+          || (
+            signedIn()
+            && uid == request.auth.uid
+            && !exists(memberPath(bottleId, uid))
+            && request.auth.token.email != null
+            && isOwner(bottleId)
+            && request.resource.data.role == "admin"
+            && request.resource.data.email is string
+            && normEmail(request.resource.data.email)
+               == normEmail(request.auth.token.email)
+          );
+
+        allow update, delete: if isAdmin(bottleId);
+      }
+
+      match /movimientos/{movId} {
+        allow read, create: if isMember(bottleId);
+        allow update, delete: if isAdmin(bottleId);
+      }
+
+      match /entries/{entryId} {
+        allow read, create: if isMember(bottleId);
+        allow update, delete: if isAdmin(bottleId);
+      }
+
+      match /meta/{docId} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
+
+      match /categories/{id} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
+
+      // ✅ subcategorías anidadas
+      match /categories/{catId}/subcategories/{subId} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
+
+      // ✅ conceptos anidados
+      match /categories/{catId}/subcategories/{subId}/concepts/{conceptId} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
+
+      match /subcategories/{id} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
+
+      match /concepts/{id} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
+
+      match /bankAccounts/{id} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
+
+      match /paymentMethods/{id} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
+
+      // ✅ catch-all para subcolecciones no previstas
+      match /{document=**} {
+        allow read: if isMember(bottleId);
+        allow write: if isAdmin(bottleId);
+      }
     }
   }
 }
