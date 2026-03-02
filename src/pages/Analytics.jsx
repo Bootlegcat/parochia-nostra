@@ -27,9 +27,7 @@ const BOTTLE_BY_ORG = {
 
 /* ---------------- rangos de tiempo ---------------- */
 const RANGE_OPTS = [
-  { id: "minute", label: "Minuto a minuto" },
   { id: "hour", label: "Por hora" },
-  { id: "day", label: "Diario" },
   { id: "week", label: "Semanal" },
   { id: "month", label: "Mensual" },
   { id: "year", label: "Anual" },
@@ -140,26 +138,15 @@ function bucketOf(rangeId, dateLike) {
   return fmtBucket("month", startOfMonth(d));
 }
 
-function makeBucketsForRange(rangeId, selectedYear, yearsSpan, now = new Date()) {
+function makeBucketsForRange(rangeId, selectedYear, yearsSpan, now = new Date(), selectedMonth) {
   const year = Number(selectedYear);
 
-  if (rangeId === "minute" || rangeId === "hour" || rangeId === "day" || rangeId === "week") {
+  if (rangeId === "hour") {
     const size = WINDOW[rangeId] ?? 12;
 
     let step, startFn;
-    if (rangeId === "minute") {
-      step = addMinutes;
-      startFn = startOfMinute;
-    } else if (rangeId === "hour") {
-      step = addHours;
-      startFn = startOfHour;
-    } else if (rangeId === "day") {
-      step = addDays;
-      startFn = startOfDay;
-    } else {
-      step = addWeeks;
-      startFn = startOfWeek;
-    }
+    step = addHours;
+    startFn = startOfHour;
 
     const buckets = [];
     let cursor = startFn(now);
@@ -167,6 +154,24 @@ function makeBucketsForRange(rangeId, selectedYear, yearsSpan, now = new Date())
     for (let i = 0; i < size; i++) {
       buckets.push(fmtBucket(rangeId, cursor));
       cursor = step(cursor, 1);
+    }
+    return buckets;
+  }
+
+  if (rangeId === "week") {
+    const m = Math.max(1, Math.min(12, Number(selectedMonth || 1)));
+    const first = new Date(year, m - 1, 1);
+    const last = new Date(year, m, 0);
+    const buckets = [];
+    const seen = new Set();
+    let cursor = new Date(first);
+    while (cursor <= last) {
+      const b = fmtBucket("week", startOfWeek(cursor));
+      if (!seen.has(b)) {
+        seen.add(b);
+        buckets.push(b);
+      }
+      cursor = addDays(cursor, 1);
     }
     return buckets;
   }
@@ -617,6 +622,7 @@ export default function Analytics() {
 
   const [range, setRange] = useState("month");
   const [selectedYear, setSelectedYear] = useState(() => String(new Date().getFullYear()));
+  const [selectedMonth, setSelectedMonth] = useState(() => String(new Date().getMonth() + 1));
 
   const [excelBusy, setExcelBusy] = useState(false);
   const [excelMsg, setExcelMsg] = useState("");
@@ -975,13 +981,21 @@ export default function Analytics() {
         (en) => normalizeDate(en.date || en.createdAt).getFullYear() === y
       );
     }
+    if (range === "week") {
+      const y = Number(selectedYear);
+      const m = Number(selectedMonth);
+      return filteredEntriesBase.filter((en) => {
+        const d = normalizeDate(en.date || en.createdAt);
+        return d.getFullYear() === y && d.getMonth() + 1 === m;
+      });
+    }
     if (range === "year") return filteredEntriesBase;
     return filteredEntriesBase;
-  }, [filteredEntriesBase, range, selectedYear]);
+  }, [filteredEntriesBase, range, selectedYear, selectedMonth]);
 
   const chartBuckets = useMemo(() => {
-    return makeBucketsForRange(range, selectedYear, yearsSpan);
-  }, [range, selectedYear, yearsSpan]);
+    return makeBucketsForRange(range, selectedYear, yearsSpan, new Date(), selectedMonth);
+  }, [range, selectedYear, yearsSpan, selectedMonth]);
 
   const { porEvento, clavesEvento, combinado, ig } = useMemo(() => {
     return construirSeries(filteredEntries, range, chartBuckets);
@@ -1150,7 +1164,8 @@ export default function Analytics() {
     });
   }, [availableConcepts, categoryNameById, subNameById]);
 
-  const showYearPicker = range === "month" || range === "year";
+  const showYearPicker = range === "month" || range === "year" || range === "week";
+  const showMonthPicker = range === "week";
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -1251,6 +1266,36 @@ export default function Analytics() {
                   </option>
                 ))}
               </select>
+
+              {showMonthPicker && (
+                <div className="mt-4">
+                  <label className="block text-sm text-slate-600 mb-2">Mes</label>
+                  <select
+                    className="w-full rounded-2xl border px-4 py-3 text-lg"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                  >
+                    {[
+                      "Enero",
+                      "Febrero",
+                      "Marzo",
+                      "Abril",
+                      "Mayo",
+                      "Junio",
+                      "Julio",
+                      "Agosto",
+                      "Septiembre",
+                      "Octubre",
+                      "Noviembre",
+                      "Diciembre",
+                    ].map((m, i) => (
+                      <option key={m} value={String(i + 1)}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {range === "year" && (
                 <div className="text-xs text-slate-500 mt-2">
