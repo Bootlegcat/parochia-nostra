@@ -1208,62 +1208,6 @@ export default function Events() {
         <BackToHome />
       </div>
 
-      {/* DEBUG PANEL */}
-      <div className="rounded-xl bg-white/90 border p-3 mb-4 text-xs">
-        <div className="grid md:grid-cols-2 gap-2">
-          <div>
-            <div>
-              <b>authReady:</b> {String(authReady)} | <b>uid:</b> {uid || "—"}
-            </div>
-            <div>
-              <b>orgId:</b> {orgId || "—"} | <b>bottleId:</b> {bottleId || "—"}
-            </div>
-            <div>
-              <b>role:</b> {roleReady ? role : "cargando…"} | <b>canEdit:</b> {String(canEdit)}
-            </div>
-            <div>
-              <b>dataMode:</b> {dataMode} | <b>catalogMode:</b> {catalogMode}
-            </div>
-            <div>
-              <b>tried bottleIds:</b> {bootstrapInfo.tried.join(", ") || "—"}
-            </div>
-
-            <div className="mt-2 flex gap-2">
-              <button
-                className="rounded-lg border px-3 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
-                onClick={resetMigration}
-                disabled={!orgRefs || !isAdmin}
-                type="button"
-                title={!isAdmin ? "Solo administrador" : ""}
-              >
-                Reset migración
-              </button>
-
-              <button
-                className="rounded-lg border px-3 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
-                onClick={loadAllEntries}
-                disabled={!orgRefs || entriesLoading}
-                type="button"
-              >
-                {entriesLoading ? "Actualizando entries…" : "Refrescar entries"}
-              </button>
-            </div>
-
-            <div className="mt-2">
-              <b>entries cache:</b> {allEntries.length} {entriesLoading ? "(cargando…)" : ""}
-            </div>
-          </div>
-          <div>
-            <div>
-              <b>migrated movs:</b> {bootstrapInfo.migCount} | <b>categories:</b> {bootstrapInfo.catCount}
-            </div>
-            <div>
-              <b>migration done:</b> {String(bootstrapInfo.done)} | <b>note:</b> {bootstrapInfo.note || "—"}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
       {/* ===================== FILA 1: CATEGORÍAS ===================== */}

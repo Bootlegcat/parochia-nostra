@@ -214,8 +214,16 @@ export default function SpecialOrgs() {
 
           <Link
             to="/organizaciones"
-            className="absolute left-4 bottom-3 text-white font-medium text-sm underline-offset-4 hover:underline transition"
-            title="Regresar a inicio"
+            className="
+              absolute left-4 bottom-3
+              inline-flex items-center justify-center
+              rounded-2xl px-4 py-2 text-sm font-semibold
+              shadow-[0_8px_18px_rgba(0,0,0,0.25)]
+              ring-1 ring-black/15 hover:shadow-[0_12px_22px_rgba(0,0,0,0.3)]
+              hover:-translate-y-0.5 transition
+            "
+            style={{ background: COLORS.tile, color: COLORS.tileText }}
+            title="Volver a inicio"
           >
             Volver a inicio
           </Link>

@@ -383,7 +383,11 @@ export default function Members() {
     try {
       setAdminBusy(true);
 
-      const bottleIds = entryBottles.length ? entryBottles.map((b) => b.id) : [bottleId];
+      const bottleIds = entryBottles.length
+        ? entryBottles.map((b) => b.id)
+        : entryId === SPECIAL_ENTRY_ID
+        ? [...SPECIAL_BOTTLES]
+        : [bottleId];
       const ref = await addDoc(entryInviteRefs.invitesCol, {
         entryId: entryId,
         entryName: entryName || "Entrada",
@@ -672,7 +676,7 @@ export default function Members() {
               className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
               disabled={adminBusy}
             >
-              Crear invite
+              Crear invitación
             </button>
           </form>
           <div className="text-xs text-slate-500 mt-2">
@@ -686,7 +690,7 @@ export default function Members() {
         <div className="rounded-2xl border bg-white p-5 mb-6">
           <div className="text-lg font-semibold mb-3">Invitaciones</div>
           {invites.length === 0 ? (
-            <div className="text-sm text-slate-600">No hay invites.</div>
+            <div className="text-sm text-slate-600">No hay invitaciones.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

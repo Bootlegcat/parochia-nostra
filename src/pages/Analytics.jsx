@@ -36,6 +36,8 @@ const RANGE_OPTS = [
 ];
 
 const WINDOW = { minute: 60, hour: 24, day: 30, week: 12, month: 12, year: 10 };
+const CATALOG_CACHE_TTL_MS = 10 * 60 * 1000; // 10 min
+const inMemoryCatalogCache = new Map();
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -262,6 +264,49 @@ function fmtMoney(n) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function getCatalogCacheKey(bottleId) {
+  return `catalogCache:${bottleId}`;
+}
+
+function readCatalogCache(bottleId) {
+  const mem = inMemoryCatalogCache.get(bottleId);
+  if (mem && Date.now() - mem.at < CATALOG_CACHE_TTL_MS) return mem;
+  try {
+    const raw = localStorage.getItem(getCatalogCacheKey(bottleId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.at) return null;
+    if (Date.now() - parsed.at > CATALOG_CACHE_TTL_MS) return null;
+    inMemoryCatalogCache.set(bottleId, parsed);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCatalogCache(bottleId, data) {
+  const payload = { ...data, at: Date.now() };
+  inMemoryCatalogCache.set(bottleId, payload);
+  try {
+    localStorage.setItem(getCatalogCacheKey(bottleId), JSON.stringify(payload));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+async function mapWithConcurrency(items, limit, fn) {
+  const res = [];
+  let idx = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }).map(async () => {
+    while (idx < items.length) {
+      const cur = idx++;
+      res[cur] = await fn(items[cur], cur);
+    }
+  });
+  await Promise.all(workers);
+  return res;
 }
 
 // ✅ Agrupar por tiempo (para tablas por categoría/sub/concepto/cuenta)
@@ -577,6 +622,8 @@ export default function Analytics() {
   const [excelMsg, setExcelMsg] = useState("");
   const [excelLinks, setExcelLinks] = useState(null);
   const [showDetailedTables, setShowDetailedTables] = useState(true);
+  const [loadingCatalogs, setLoadingCatalogs] = useState(false);
+  const [catalogUpdatedAt, setCatalogUpdatedAt] = useState(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(getAuth(), (user) => setUid(user?.uid || null));
@@ -599,6 +646,91 @@ export default function Analytics() {
     setSelectedBankAccountId("");
   }, [bottleId]);
 
+  async function fetchCatalogsFromFirestore() {
+    const [catsSnap, bankSnap] = await Promise.all([
+      getDocs(query(collection(db, "botellas", bottleId, "categories"), orderBy("name"))),
+      getDocs(query(collection(db, "botellas", bottleId, "bankAccounts"), orderBy("name"))),
+    ]);
+
+    const cats = catsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const banks = bankSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const subs = [];
+    const cons = [];
+
+    await mapWithConcurrency(cats, 6, async (c) => {
+      let subsSnap;
+      try {
+        subsSnap = await getDocs(
+          query(collection(db, "botellas", bottleId, "categories", c.id, "subcategories"), orderBy("name"))
+        );
+      } catch {
+        subsSnap = await getDocs(
+          collection(db, "botellas", bottleId, "categories", c.id, "subcategories")
+        );
+      }
+
+      const subsHere = subsSnap.docs.map((d) => ({ id: d.id, categoryId: c.id, ...d.data() }));
+      subs.push(...subsHere);
+    });
+
+    await mapWithConcurrency(subs, 6, async (s) => {
+      let consSnap;
+      try {
+        consSnap = await getDocs(
+          query(
+            collection(db, "botellas", bottleId, "categories", s.categoryId, "subcategories", s.id, "concepts"),
+            orderBy("name")
+          )
+        );
+      } catch {
+        consSnap = await getDocs(
+          collection(db, "botellas", bottleId, "categories", s.categoryId, "subcategories", s.id, "concepts")
+        );
+      }
+      cons.push(
+        ...consSnap.docs.map((d) => ({
+          id: d.id,
+          categoryId: s.categoryId,
+          subCategoryId: s.id,
+          ...d.data(),
+        }))
+      );
+    });
+
+    return { cats, subs, cons, banks };
+  }
+
+  async function loadCatalogs(force = false) {
+    if (!bottleId) return;
+
+    if (!force) {
+      const cached = readCatalogCache(bottleId);
+      if (cached) {
+        setCategories(cached.cats || []);
+        setSubCategories(cached.subs || []);
+        setConcepts(cached.cons || []);
+        setBankAccounts(cached.banks || []);
+        setCatalogUpdatedAt(cached.at || null);
+      }
+    }
+
+    setLoadingCatalogs(true);
+    try {
+      const { cats, subs, cons, banks } = await fetchCatalogsFromFirestore();
+      setCategories(cats);
+      setSubCategories(subs);
+      setConcepts(cons);
+      setBankAccounts(banks);
+      setCatalogUpdatedAt(Date.now());
+      writeCatalogCache(bottleId, { cats, subs, cons, banks });
+    } catch (e) {
+      console.error("Analytics catalogs error:", e);
+    } finally {
+      setLoadingCatalogs(false);
+    }
+  }
+
   useEffect(() => {
     async function load() {
       if (!uid || !orgId || !bottleId) return;
@@ -615,103 +747,7 @@ export default function Analytics() {
         console.error("Analytics movimientos error:", e);
       }
 
-      // ======= catálogos: leer desde botellas/{bottleId} =======
-      let cats = categories;
-      try {
-        const catsSnap = await getDocs(
-          query(collection(db, "botellas", bottleId, "categories"), orderBy("name"))
-        );
-        cats = catsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setCategories(cats);
-      } catch (e) {
-        console.error("Analytics categories error:", e);
-      }
-
-      const subs = [];
-      const cons = [];
-
-      for (const c of cats || []) {
-        try {
-          let subsSnap;
-          try {
-            subsSnap = await getDocs(
-              query(
-                collection(db, "botellas", bottleId, "categories", c.id, "subcategories"),
-                orderBy("name")
-              )
-            );
-          } catch {
-            subsSnap = await getDocs(
-              collection(db, "botellas", bottleId, "categories", c.id, "subcategories")
-            );
-          }
-
-          const subsHere = subsSnap.docs.map((d) => ({ id: d.id, categoryId: c.id, ...d.data() }));
-          subs.push(...subsHere);
-
-          for (const s of subsHere) {
-            try {
-              let consSnap;
-              try {
-                consSnap = await getDocs(
-                  query(
-                    collection(
-                      db,
-                      "botellas",
-                      bottleId,
-                      "categories",
-                      c.id,
-                      "subcategories",
-                      s.id,
-                      "concepts"
-                    ),
-                    orderBy("name")
-                  )
-                );
-              } catch {
-                consSnap = await getDocs(
-                  collection(
-                    db,
-                    "botellas",
-                    bottleId,
-                    "categories",
-                    c.id,
-                    "subcategories",
-                    s.id,
-                    "concepts"
-                  )
-                );
-              }
-
-              cons.push(
-                ...consSnap.docs.map((d) => ({
-                  id: d.id,
-                  categoryId: c.id,
-                  subCategoryId: s.id,
-                  ...d.data(),
-                }))
-              );
-            } catch (e) {
-              console.error("Analytics concepts error:", e);
-            }
-          }
-        } catch (e) {
-          console.error("Analytics subcategories error:", e);
-        }
-      }
-
-      setSubCategories(subs);
-      setConcepts(cons);
-
-      // ======= cuentas bancarias =======
-      try {
-        const bankSnap = await getDocs(
-          query(collection(db, "botellas", bottleId, "bankAccounts"), orderBy("name"))
-        );
-        setBankAccounts(bankSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (e) {
-        console.error("Analytics bankAccounts error:", e);
-      }
+      await loadCatalogs(false);
     }
 
     load();
@@ -1126,8 +1162,64 @@ export default function Analytics() {
       </div>
 
       <div className="rounded-2xl border bg-white p-5 mb-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <div className="text-sm font-medium">Exportación Excel (Maestro)</div>
+            <div className="text-xs text-slate-500">
+              Genera/actualiza el Excel maestro en la nube (con pestañas por mes) y lo deja listo para descargar.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onGenerateExcelMaster}
+            disabled={excelBusy || !orgId}
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+          >
+            {excelBusy ? "Actualizando…" : "Actualizar Excel Maestro"}
+          </button>
+        </div>
+
+        {(excelMsg || excelLinks) && (
+          <div className="mt-3 text-sm">
+            {excelMsg && <div className="mb-2">{excelMsg}</div>}
+
+            {excelLinks && (
+              <div className="flex flex-col md:flex-row gap-2">
+                {excelLinks.masterUrl ? (
+                  <a
+                    href={excelLinks.masterUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Descargar Maestro
+                  </a>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border bg-white p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="text-base font-semibold text-slate-800">Filtros</div>
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            {catalogUpdatedAt ? (
+              <span>
+                Última actualización: {new Date(catalogUpdatedAt).toLocaleTimeString("es-MX")}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => loadCatalogs(true)}
+              disabled={loadingCatalogs}
+              className="rounded-xl border px-3 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
+            >
+              {loadingCatalogs ? "Actualizando…" : "Actualizar catálogos"}
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           <div className={showYearPicker ? "md:col-span-6" : "md:col-span-5"}>
@@ -1206,6 +1298,9 @@ export default function Analytics() {
             />
           </div>
         </div>
+        {loadingCatalogs && (
+          <div className="mt-3 text-sm text-slate-500">Cargando sub-categorías y conceptos…</div>
+        )}
 
         <div className="mt-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="text-slate-500">
@@ -1640,46 +1735,6 @@ export default function Analytics() {
         </>
       )}
 
-      <div className="rounded-2xl border bg-white p-5 mb-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <div className="text-sm font-medium">Exportación Excel (Maestro)</div>
-            <div className="text-xs text-slate-500">
-              Genera/actualiza el Excel maestro en la nube (con pestañas por mes) y lo deja listo para descargar.
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onGenerateExcelMaster}
-            disabled={excelBusy || !orgId}
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
-          >
-            {excelBusy ? "Actualizando…" : "Actualizar Excel Maestro"}
-          </button>
-        </div>
-
-        {(excelMsg || excelLinks) && (
-          <div className="mt-3 text-sm">
-            {excelMsg && <div className="mb-2">{excelMsg}</div>}
-
-            {excelLinks && (
-              <div className="flex flex-col md:flex-row gap-2">
-                {excelLinks.masterUrl ? (
-                  <a
-                    href={excelLinks.masterUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Descargar Maestro
-                  </a>
-                ) : null}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

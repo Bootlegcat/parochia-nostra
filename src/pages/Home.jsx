@@ -1,6 +1,9 @@
 // src/pages/Home.jsx
 import { Link, Navigate, useParams } from "react-router-dom";
+import { useEffect, useMemo } from "react";
 import { getAuth, signOut } from "firebase/auth";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { db } from "../firebase";
 
 // Rutas públicas (archivos en /public)
 const CREST_URL = "/crest.png";
@@ -12,6 +15,51 @@ const COLORS = {
   tile: "#4b2d22",
   tileText: "#d3b187",
 };
+
+const BOTTLE_BY_ORG = {
+  iglesia: "de-la-iglesia",
+  "construyendo-lazos": "construyendo-lazos",
+};
+
+const CATALOG_CACHE_TTL_MS = 10 * 60 * 1000;
+
+function getCatalogCacheKey(bottleId) {
+  return `catalogCache:${bottleId}`;
+}
+
+function readCatalogCache(bottleId) {
+  try {
+    const raw = localStorage.getItem(getCatalogCacheKey(bottleId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.at) return null;
+    if (Date.now() - parsed.at > CATALOG_CACHE_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCatalogCache(bottleId, data) {
+  try {
+    localStorage.setItem(getCatalogCacheKey(bottleId), JSON.stringify({ ...data, at: Date.now() }));
+  } catch {
+    // ignore
+  }
+}
+
+async function mapWithConcurrency(items, limit, fn) {
+  const res = [];
+  let idx = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }).map(async () => {
+    while (idx < items.length) {
+      const cur = idx++;
+      res[cur] = await fn(items[cur], cur);
+    }
+  });
+  await Promise.all(workers);
+  return res;
+}
 
 function CornerImg({ className = "" }) {
   return (
@@ -77,6 +125,7 @@ function SubTile({ to, children }) {
 export default function Home() {
   const auth = getAuth();
   const { orgId } = useParams(); // "iglesia" | "construyendo-lazos" | bottleId personal
+  const bottleId = useMemo(() => (orgId ? BOTTLE_BY_ORG[orgId] || orgId : ""), [orgId]);
 
   async function onLogout() {
     try {
@@ -85,6 +134,73 @@ export default function Home() {
       alert(e?.message || String(e));
     }
   }
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!bottleId) return;
+      const cached = readCatalogCache(bottleId);
+      if (cached) return;
+
+      try {
+        const [catsSnap, bankSnap] = await Promise.all([
+          getDocs(query(collection(db, "botellas", bottleId, "categories"), orderBy("name"))),
+          getDocs(query(collection(db, "botellas", bottleId, "bankAccounts"), orderBy("name"))),
+        ]);
+
+        const cats = catsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const banks = bankSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        const subs = [];
+        const cons = [];
+
+        await mapWithConcurrency(cats, 6, async (c) => {
+          let subsSnap;
+          try {
+            subsSnap = await getDocs(
+              query(collection(db, "botellas", bottleId, "categories", c.id, "subcategories"), orderBy("name"))
+            );
+          } catch {
+            subsSnap = await getDocs(collection(db, "botellas", bottleId, "categories", c.id, "subcategories"));
+          }
+          const subsHere = subsSnap.docs.map((d) => ({ id: d.id, categoryId: c.id, ...d.data() }));
+          subs.push(...subsHere);
+        });
+
+        await mapWithConcurrency(subs, 6, async (s) => {
+          let consSnap;
+          try {
+            consSnap = await getDocs(
+              query(
+                collection(db, "botellas", bottleId, "categories", s.categoryId, "subcategories", s.id, "concepts"),
+                orderBy("name")
+              )
+            );
+          } catch {
+            consSnap = await getDocs(
+              collection(db, "botellas", bottleId, "categories", s.categoryId, "subcategories", s.id, "concepts")
+            );
+          }
+          cons.push(
+            ...consSnap.docs.map((d) => ({
+              id: d.id,
+              categoryId: s.categoryId,
+              subCategoryId: s.id,
+              ...d.data(),
+            }))
+          );
+        });
+
+        if (!alive) return;
+        writeCatalogCache(bottleId, { cats, subs, cons, banks });
+      } catch {
+        // ignore preload errors
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [bottleId]);
 
   // ✅ Si no hay orgId, manda al selector central
   if (!orgId) return <Navigate to="/organizaciones" replace />;
@@ -137,16 +253,21 @@ export default function Home() {
 
           <div className="pb-12" />
 
-          {/* ✅ Cambiar organización (ahora al selector real) */}
+          {/* ✅ Cambiar botella (más visible) */}
           <Link
             to="/especiales"
             className="
-              absolute left-4 bottom-3 text-white font-medium text-sm
-              underline-offset-4 hover:underline transition
+              absolute left-4 bottom-3
+              inline-flex items-center justify-center
+              rounded-2xl px-4 py-2 text-sm font-semibold
+              shadow-[0_8px_18px_rgba(0,0,0,0.25)]
+              ring-1 ring-black/15 hover:shadow-[0_12px_22px_rgba(0,0,0,0.3)]
+              hover:-translate-y-0.5 transition
             "
-            title="Regresar a inicio"
+            style={{ background: "#4b2d22", color: "#d3b187" }}
+            title="Cambiar botella"
           >
-            Cambiar organización
+            Cambiar botella
           </Link>
 
           {/* Cerrar sesión */}
