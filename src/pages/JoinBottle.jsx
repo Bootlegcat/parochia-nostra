@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db } from "../firebase";
 
 function normEmail(s) {
@@ -11,10 +11,10 @@ function normEmail(s) {
 
 function parseInviteCode(raw) {
   const t = String(raw || "").trim();
-  if (!t) return { bottleId: "", inviteId: "" };
-  if (!t.includes(":")) return { bottleId: "", inviteId: "" };
-  const [bottleId, inviteId] = t.split(":").map((x) => x.trim());
-  return { bottleId: bottleId || "", inviteId: inviteId || "" };
+  if (!t) return { entryId: "", inviteId: "" };
+  if (!t.includes(":")) return { entryId: "", inviteId: "" };
+  const [entryId, inviteId] = t.split(":").map((x) => x.trim());
+  return { entryId: entryId || "", inviteId: inviteId || "" };
 }
 
 export default function JoinBottle() {
@@ -40,15 +40,15 @@ export default function JoinBottle() {
     setOk("");
 
     const parsed = parseInviteCode(code);
-    if (!parsed.bottleId || !parsed.inviteId) {
-      return setError("Código inválido. Usa formato: bottleId:inviteId");
+    if (!parsed.entryId || !parsed.inviteId) {
+      return setError("Código inválido. Usa formato: entradaId:inviteId");
     }
     if (!user?.uid || !user?.email) return setError("No hay sesión activa con email.");
 
     try {
       setBusy(true);
 
-      const inviteRef = doc(db, "botellas", parsed.bottleId, "invites", parsed.inviteId);
+      const inviteRef = doc(db, "entradas", parsed.entryId, "invites", parsed.inviteId);
       const invSnap = await getDoc(inviteRef);
       if (!invSnap.exists()) throw new Error("Ese código no existe.");
       const inv = invSnap.data() || {};
@@ -58,23 +58,34 @@ export default function JoinBottle() {
         throw new Error("Este código no es para tu correo.");
       }
 
-      await setDoc(
-        doc(db, "botellas", parsed.bottleId, "members", user.uid),
-        {
-          role: "viewer",
-          email: normEmail(user.email),
-          inviteId: parsed.inviteId,
-          createdAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      const bottleIds = Array.isArray(inv.bottleIds) && inv.bottleIds.length ? inv.bottleIds : [];
+      if (!bottleIds.length) throw new Error("Este código no tiene botellas asociadas.");
+
+      for (const bid of bottleIds) {
+        await setDoc(
+          doc(db, "botellas", bid, "members", user.uid),
+          {
+            role: "viewer",
+            email: normEmail(user.email),
+            inviteId: parsed.inviteId,
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
 
       await updateDoc(inviteRef, { used: true });
 
-      setOk("✅ Te uniste a la botella. Redirigiendo…");
+      await setDoc(
+        doc(db, "users", user.uid),
+        { bottleIds: arrayUnion(...bottleIds) },
+        { merge: true }
+      );
+
+      setOk("✅ Te uniste a la entrada. Redirigiendo…");
       setCode("");
       setTimeout(() => {
-        nav(`/org/${parsed.bottleId}/home`);
+        nav("/organizaciones");
       }, 600);
     } catch (e2) {
       setError(e2?.message || String(e2));
@@ -90,16 +101,16 @@ export default function JoinBottle() {
     <div className="min-h-screen flex items-center justify-center bg-[#3b241b] p-6">
       <div className="w-full max-w-2xl rounded-3xl bg-[#4b2d22] text-[#d3b187] p-10">
         <div className="text-2xl mb-2" style={{ fontFamily: '"Cinzel", Georgia, serif' }}>
-          Unirse a una botella
+          Unirse a una entrada
         </div>
         <div className="text-sm text-[#d3b187]/80 mb-6">
-          Pega el código que te dio el admin en formato <b>bottleId:inviteId</b>.
+          Pega el código que te dio el admin en formato <b>entradaId:inviteId</b>.
         </div>
 
         <form onSubmit={onJoin} className="flex flex-col md:flex-row gap-3">
           <input
             className="flex-1 rounded-xl border px-3 py-2 text-black"
-            placeholder="bottleId:inviteId"
+            placeholder="entradaId:inviteId"
             value={code}
             onChange={(e) => setCode(e.target.value)}
           />

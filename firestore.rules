@@ -102,6 +102,53 @@ service cloud.firestore {
     }
 
     // =====================================================
+    // ENTRADAS
+    // =====================================================
+    match /entradas/{entryId} {
+      allow read, create: if signedIn();
+      allow update, delete: if signedIn();
+
+      // Invitaciones por entrada
+      match /invites/{inviteId} {
+        allow read: if signedIn()
+          && resource.data.bottleId is string
+          && (
+            isAdmin(resource.data.bottleId)
+            || (
+              request.auth.token.email != null
+              && normEmail(resource.data.email)
+                 == normEmail(request.auth.token.email)
+            )
+          );
+
+        allow create: if signedIn()
+          && request.resource.data.bottleId is string
+          && isAdmin(request.resource.data.bottleId)
+          && request.resource.data.email is string
+          && request.resource.data.used == false;
+
+        allow update: if signedIn()
+          && resource.data.bottleId is string
+          && (
+            isAdmin(resource.data.bottleId)
+            || (
+              request.auth.token.email != null
+              && normEmail(resource.data.email)
+                 == normEmail(request.auth.token.email)
+              && resource.data.used != true
+              && request.resource.data.used == true
+              && request.resource.data.email == resource.data.email
+              && request.resource.data.role == resource.data.role
+            )
+          );
+
+        allow delete: if signedIn()
+          && resource.data.bottleId is string
+          && isAdmin(resource.data.bottleId);
+      }
+    }
+
+    // =====================================================
     // BOTELLAS
     // =====================================================
     match /botellas/{bottleId} {

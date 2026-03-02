@@ -1,6 +1,6 @@
 // src/pages/Members.jsx
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Link, useParams } from "react-router-dom";
+import { Navigate, Link, useNavigate, useParams } from "react-router-dom";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
@@ -25,23 +25,34 @@ const BOTTLE_ID_BY_ORG = {
   "construyendo-lazos": "construyendo-lazos",
 };
 
+const SPECIAL_BOTTLES = ["de-la-iglesia", "construyendo-lazos"];
+const SPECIAL_ENTRY_ID = "parroquia-nuestra-senora-de-guadalupe";
+const SPECIAL_ENTRY_NAME = "Parroquia Nuestra Señora de Guadalupe";
+
 const ROLES = ["viewer", "editor", "admin"];
 
 function normEmail(s) {
   return String(s || "").trim().toLowerCase();
 }
 
-function parseInviteCode(raw, fallbackBottleId) {
+function parseInviteCode(raw, fallbackEntryId) {
   const t = String(raw || "").trim();
-  if (!t) return { bottleId: "", inviteId: "" };
+  if (!t) return { entryId: "", inviteId: "" };
   if (t.includes(":")) {
-    const [bottleId, inviteId] = t.split(":").map((x) => x.trim());
-    return { bottleId: bottleId || "", inviteId: inviteId || "" };
+    const [entryId, inviteId] = t.split(":").map((x) => x.trim());
+    return { entryId: entryId || "", inviteId: inviteId || "" };
   }
-  return { bottleId: fallbackBottleId || "", inviteId: t };
+  return { entryId: fallbackEntryId || "", inviteId: t };
+}
+
+function orgIdForBottleId(bottleId) {
+  if (bottleId === "de-la-iglesia") return "iglesia";
+  if (bottleId === "construyendo-lazos") return "construyendo-lazos";
+  return bottleId;
 }
 
 export default function Members() {
+  const nav = useNavigate();
   const { orgId } = useParams();
 
   // ✅ mantener UI/flujo, pero hacer el user reactivo (evita nulls raros)
@@ -55,7 +66,7 @@ export default function Members() {
   // hooks siempre primero
   const bottleId = useMemo(() => {
     if (!orgId) return "";
-    return BOTTLE_ID_BY_ORG[orgId] || orgId; // permite orgId directo si algún día usas bottleId en URL
+    return BOTTLE_ID_BY_ORG[orgId] || orgId;
   }, [orgId]);
 
   const refs = useMemo(() => {
@@ -63,20 +74,23 @@ export default function Members() {
     return {
       memberDoc: doc(db, "botellas", bottleId, "members", user.uid),
       membersCol: collection(db, "botellas", bottleId, "members"),
-      invitesCol: collection(db, "botellas", bottleId, "invites"),
-      inviteDoc: (inviteId) => doc(db, "botellas", bottleId, "invites", inviteId),
     };
   }, [bottleId, user?.uid]);
 
   const [loading, setLoading] = useState(true);
   const [member, setMember] = useState(null);
 
+  // ✅ datos de entrada
+  const [entryId, setEntryId] = useState("");
+  const [entryName, setEntryName] = useState("");
+  const [entryBottles, setEntryBottles] = useState([]); // {id, name}
+
   // ✅ abajo: ingresar código (siempre visible)
   const [inviteCode, setInviteCode] = useState("");
   const [claimBusy, setClaimBusy] = useState(false);
   const [showClaim, setShowClaim] = useState(false);
 
-  // ✅ unirse a otra botella con código
+  // ✅ unirse a otra entrada con código
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinBusy, setJoinBusy] = useState(false);
@@ -94,6 +108,14 @@ export default function Members() {
   // ✅ rol con fallback para que NO salga vacío
   const myRole = member?.role || "viewer";
   const isAdmin = myRole === "admin";
+
+  const entryInviteRefs = useMemo(() => {
+    if (!entryId) return null;
+    return {
+      invitesCol: collection(db, "entradas", entryId, "invites"),
+      inviteDoc: (inviteId) => doc(db, "entradas", entryId, "invites", inviteId),
+    };
+  }, [entryId]);
 
   async function loadMyMembership() {
     if (!refs?.memberDoc) {
@@ -115,6 +137,66 @@ export default function Members() {
     }
   }
 
+  async function loadEntryData() {
+    if (!bottleId || !user?.uid) return;
+    try {
+      let eId = "";
+      let eName = "";
+
+      const bSnap = await getDoc(doc(db, "botellas", bottleId));
+      const bData = bSnap.exists() ? bSnap.data() : {};
+
+      eId = bData?.entryId || "";
+      eName = bData?.entryName || "";
+
+      if (!eId) {
+        if (SPECIAL_BOTTLES.includes(bottleId)) {
+          eId = SPECIAL_ENTRY_ID;
+          eName = SPECIAL_ENTRY_NAME;
+        } else {
+          eId = "sin-entrada";
+          eName = "Sin entrada";
+        }
+      }
+
+      setEntryId(eId);
+      setEntryName(eName);
+
+      // cargar botellas de esta entrada
+      const uSnap = await getDoc(doc(db, "users", user.uid));
+      const baseIds = uSnap.exists() ? uSnap.data()?.bottleIds || [] : [];
+
+      const ids = new Set(baseIds);
+      for (const bid of SPECIAL_BOTTLES) {
+        try {
+          const mRef = doc(db, "botellas", bid, "members", user.uid);
+          const mSnap = await getDoc(mRef);
+          if (mSnap.exists()) ids.add(bid);
+        } catch {
+          // ignore
+        }
+      }
+
+      const rows = [];
+      for (const id of ids) {
+        try {
+          const snap = await getDoc(doc(db, "botellas", id));
+          if (!snap.exists()) continue;
+          const data = snap.data() || {};
+          const bid = data?.entryId || (SPECIAL_BOTTLES.includes(id) ? SPECIAL_ENTRY_ID : "sin-entrada");
+          if (bid !== eId) continue;
+          rows.push({ id, name: data?.name || id });
+        } catch {
+          // ignore
+        }
+      }
+
+      setEntryBottles(rows);
+    } catch {
+      // ignore
+    }
+  }
+
   async function loadAdminData() {
     if (!refs || !isAdmin) return;
 
@@ -126,19 +208,20 @@ export default function Members() {
       try {
         mSnap = await getDocs(query(refs.membersCol, orderBy("createdAt", "desc")));
       } catch {
-        // fallback si algo raro con orderBy/índices
         mSnap = await getDocs(refs.membersCol);
       }
       setMembers(mSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-      // invites
-      let iSnap;
-      try {
-        iSnap = await getDocs(query(refs.invitesCol, orderBy("createdAt", "desc"), limit(50)));
-      } catch {
-        iSnap = await getDocs(query(refs.invitesCol, limit(50)));
+      // invites (entrada)
+      if (entryInviteRefs?.invitesCol) {
+        let iSnap;
+        try {
+          iSnap = await getDocs(query(entryInviteRefs.invitesCol, orderBy("createdAt", "desc"), limit(50)));
+        } catch {
+          iSnap = await getDocs(query(entryInviteRefs.invitesCol, limit(50)));
+        }
+        setInvites(iSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       }
-      setInvites(iSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
@@ -152,9 +235,14 @@ export default function Members() {
   }, [refs?.memberDoc?.path]);
 
   useEffect(() => {
+    loadEntryData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bottleId, user?.uid]);
+
+  useEffect(() => {
     loadAdminData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, refs?.membersCol?.path, refs?.invitesCol?.path]);
+  }, [isAdmin, refs?.membersCol?.path, entryInviteRefs?.invitesCol?.path]);
 
   async function onClaimInvite(e) {
     e.preventDefault();
@@ -163,45 +251,58 @@ export default function Members() {
 
     const code = inviteCode.trim();
     if (!code) return setError("Ingresa un código de invitación.");
-    if (!refs?.memberDoc) return setError("No se pudo resolver la organización.");
+    if (!entryId) return setError("No se pudo resolver la entrada.");
     if (!user?.email) return setError("Tu usuario no tiene email. Inicia sesión con email.");
 
     try {
       setClaimBusy(true);
 
-      const parsed = parseInviteCode(code, bottleId);
-      if (!parsed.bottleId || !parsed.inviteId) {
-        throw new Error("Código inválido. Usa formato: bottleId:inviteId");
+      const parsed = parseInviteCode(code, entryId);
+      if (!parsed.entryId || !parsed.inviteId) {
+        throw new Error("Código inválido. Usa formato: entradaId:inviteId");
       }
-      if (parsed.bottleId !== bottleId) {
+      if (parsed.entryId !== entryId) {
         throw new Error(
-          "Este código es para otra botella. Usa el botón de abajo: “Ingresar código de invitación”."
+          "Este código es para otra entrada. Usa el botón de abajo: “Ingresar código de invitación”."
         );
       }
 
-      // ✅ IMPORTANTE: el invite debe EXISTIR. Si no existe, setDoc(inviteDoc) crearía uno nuevo y rompe reglas.
-      // Marcamos used=true con updateDoc (no setDoc) para que si no existe, truene con mensaje claro.
-      await setDoc(
-        refs.memberDoc,
-        {
-          role: "viewer",
-          email: normEmail(user.email),
-          inviteId: parsed.inviteId,
-          createdAt: serverTimestamp(),
-        },
-        { merge: false } // crea doc limpio (y cumple rules de create)
-      );
+      const inviteRef = doc(db, "entradas", parsed.entryId, "invites", parsed.inviteId);
+      const inviteSnap = await getDoc(inviteRef);
+      if (!inviteSnap.exists()) throw new Error("Ese código no existe en esta entrada.");
+      const inv = inviteSnap.data() || {};
 
-      // ✅ consume invite (debe existir)
-      await updateDoc(refs.inviteDoc(parsed.inviteId), { used: true });
+      if (inv.used === true) throw new Error("Este código ya fue usado.");
+      if (normEmail(inv.email) !== normEmail(user.email)) {
+        throw new Error("Este código no es para tu correo.");
+      }
+
+      const bottleIds = Array.isArray(inv.bottleIds) && inv.bottleIds.length
+        ? inv.bottleIds
+        : [bottleId];
+
+      for (const bid of bottleIds) {
+        await setDoc(
+          doc(db, "botellas", bid, "members", user.uid),
+          {
+            role: "viewer",
+            email: normEmail(user.email),
+            inviteId: parsed.inviteId,
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      await updateDoc(inviteRef, { used: true });
 
       await setDoc(
         doc(db, "users", user.uid),
-        { bottleIds: arrayUnion(bottleId) },
+        { bottleIds: arrayUnion(...bottleIds) },
         { merge: true }
       );
 
-      setOkMsg("✅ Acceso concedido. Ya eres miembro.");
+      setOkMsg("✅ Acceso concedido. Ya eres miembro de la entrada.");
       setInviteCode("");
       setShowClaim(false);
 
@@ -209,11 +310,9 @@ export default function Members() {
       await loadAdminData();
     } catch (e2) {
       const msg = e2?.message || String(e2);
-
-      // mensajes comunes para que entiendas rápido
       if (msg.toLowerCase().includes("no document to update")) {
         setError(
-          "❌ Ese código no existe en esta organización (o fue borrado). Pide al admin que te copie el código exacto."
+          "❌ Ese código no existe en esta entrada (o fue borrado). Pide al admin que te copie el código exacto."
         );
       } else if (msg.toLowerCase().includes("missing or insufficient permissions")) {
         setError(
@@ -235,7 +334,7 @@ export default function Members() {
     setError("");
     setOkMsg("");
 
-    if (!refs?.invitesCol) return setError("No se pudo resolver la organización.");
+    if (!entryInviteRefs?.invitesCol) return setError("No se pudo resolver la entrada.");
     if (!isAdmin) return setError("No tienes permisos.");
 
     const email = normEmail(inviteEmail);
@@ -244,7 +343,13 @@ export default function Members() {
 
     try {
       setAdminBusy(true);
-      const ref = await addDoc(refs.invitesCol, {
+
+      const bottleIds = entryBottles.length ? entryBottles.map((b) => b.id) : [bottleId];
+      const ref = await addDoc(entryInviteRefs.invitesCol, {
+        entryId: entryId,
+        entryName: entryName || "Entrada",
+        bottleId: bottleId,
+        bottleIds,
         email,
         role: inviteRole,
         used: false,
@@ -252,7 +357,7 @@ export default function Members() {
         createdBy: user?.uid || "",
       });
 
-      setOkMsg(`✅ Invitación creada. Código: ${bottleId}:${ref.id}`);
+      setOkMsg(`✅ Invitación creada. Código: ${entryId}:${ref.id}`);
       setInviteEmail("");
       setInviteRole("viewer");
       await loadAdminData();
@@ -317,14 +422,14 @@ export default function Members() {
     setError("");
     setOkMsg("");
     if (!isAdmin) return;
-    if (!bottleId) return;
+    if (!entryInviteRefs?.inviteDoc) return;
 
     const ok = window.confirm("¿Eliminar esta invitación?");
     if (!ok) return;
 
     try {
       setAdminBusy(true);
-      await deleteDoc(doc(db, "botellas", bottleId, "invites", inviteId));
+      await deleteDoc(entryInviteRefs.inviteDoc(inviteId));
       setOkMsg("✅ Invitación eliminada.");
       await loadAdminData();
     } catch (e2) {
@@ -334,24 +439,21 @@ export default function Members() {
     }
   }
 
-  async function onJoinOtherBottle(e) {
+  async function onJoinOtherEntry(e) {
     e.preventDefault();
     setError("");
     setOkMsg("");
 
     const parsed = parseInviteCode(joinCode, "");
-    if (!parsed.bottleId || !parsed.inviteId) {
-      return setError("Código inválido. Usa formato: bottleId:inviteId");
+    if (!parsed.entryId || !parsed.inviteId) {
+      return setError("Código inválido. Usa formato: entradaId:inviteId");
     }
     if (!user?.uid || !user?.email) return setError("No hay sesión activa con email.");
 
     try {
       setJoinBusy(true);
 
-      const targetBottleId = parsed.bottleId;
-      const inviteId = parsed.inviteId;
-
-      const inviteRef = doc(db, "botellas", targetBottleId, "invites", inviteId);
+      const inviteRef = doc(db, "entradas", parsed.entryId, "invites", parsed.inviteId);
       const inviteSnap = await getDoc(inviteRef);
       if (!inviteSnap.exists()) throw new Error("Ese código no existe.");
       const inv = inviteSnap.data() || {};
@@ -361,28 +463,35 @@ export default function Members() {
         throw new Error("Este código no es para tu correo.");
       }
 
-      await setDoc(
-        doc(db, "botellas", targetBottleId, "members", user.uid),
-        {
-          role: "viewer",
-          email: normEmail(user.email),
-          inviteId,
-          createdAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      const bottleIds = Array.isArray(inv.bottleIds) && inv.bottleIds.length
+        ? inv.bottleIds
+        : [];
+      if (!bottleIds.length) {
+        throw new Error("Este código no tiene botellas asociadas. Pide uno nuevo al admin.");
+      }
+
+      for (const bid of bottleIds) {
+        await setDoc(
+          doc(db, "botellas", bid, "members", user.uid),
+          {
+            role: "viewer",
+            email: normEmail(user.email),
+            inviteId: parsed.inviteId,
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
 
       await updateDoc(inviteRef, { used: true });
 
       await setDoc(
         doc(db, "users", user.uid),
-        { bottleIds: arrayUnion(targetBottleId) },
+        { bottleIds: arrayUnion(...bottleIds) },
         { merge: true }
       );
 
-      setOkMsg(
-        `✅ Te uniste a la botella: ${targetBottleId}. Ahora ya tienes acceso.`
-      );
+      setOkMsg(`✅ Te uniste a la entrada: ${inv.entryName || parsed.entryId}.`);
       setJoinCode("");
       setJoinOpen(false);
     } catch (e2) {
@@ -415,11 +524,11 @@ export default function Members() {
         <h1 className="text-2xl md:text-3xl font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
           Miembros
         </h1>
-        <BackToHome />
+        <BackToHome to="/especiales" />
       </div>
 
       <div className="mb-3 flex items-center justify-between text-sm">
-        <Link className="text-white/90 underline underline-offset-4" to={`/org/${orgId}/home`}>
+        <Link className="text-white/90 underline underline-offset-4" to="/especiales">
           Volver al inicio
         </Link>
         <span className="text-white/80">Org: {orgId}</span>
@@ -439,6 +548,31 @@ export default function Members() {
           )}
         </div>
       )}
+
+      {/* BOTELLAS DE LA ENTRADA */}
+      <div className="rounded-2xl border bg-white p-5 mb-6">
+        <div className="text-lg font-semibold">Botellas de la entrada</div>
+        <div className="text-sm text-slate-600 mt-1">
+          Entrada: <b>{entryName || "(sin nombre)"}</b> · ID: <b>{entryId || "(sin ID)"}</b>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          {entryBottles.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              className="rounded-xl border px-4 py-3 text-left hover:bg-slate-50"
+              onClick={() => nav(`/org/${orgIdForBottleId(b.id)}/home`)}
+            >
+              <div className="font-semibold">{b.name}</div>
+              <div className="text-xs text-slate-500">{b.id}</div>
+            </button>
+          ))}
+          {entryBottles.length === 0 && (
+            <div className="text-sm text-slate-500">No hay botellas para esta entrada.</div>
+          )}
+        </div>
+      </div>
 
       {/* TU ACCESO (igual que antes) */}
       <div className="rounded-2xl border bg-white p-5 mb-6">
@@ -490,7 +624,7 @@ export default function Members() {
             </button>
           </form>
           <div className="text-xs text-slate-500 mt-2">
-            Nota: por seguridad, al hacer claim el usuario entra como <b>viewer</b>. Luego tú lo subes a editor/admin aquí.
+            Nota: el código se comparte como <b>{entryId || "entradaId"}:inviteId</b>. El usuario entra como <b>viewer</b>.
           </div>
         </div>
       )}
@@ -506,6 +640,7 @@ export default function Members() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-slate-500">
+                    <th className="py-2 pr-3">Entrada</th>
                     <th className="py-2 pr-3">Código</th>
                     <th className="py-2 pr-3">Email</th>
                     <th className="py-2 pr-3">Rol</th>
@@ -514,30 +649,34 @@ export default function Members() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invites.map((inv) => (
-                    <tr key={inv.id} className="border-t">
-                      <td className="py-2 pr-3 font-mono">{inv.id}</td>
-                      <td className="py-2 pr-3">{inv.email}</td>
-                      <td className="py-2 pr-3">{inv.role}</td>
-                      <td className="py-2 pr-3">{inv.used ? "sí" : "no"}</td>
-                      <td className="py-2 pr-3 flex gap-2">
-                        <button
-                          className="rounded-lg border px-3 py-1 hover:bg-slate-50"
-                          onClick={() => onCopy(inv.id)}
-                          type="button"
-                        >
-                          Copiar
-                        </button>
-                        <button
-                          className="rounded-lg border px-3 py-1 hover:bg-red-50 hover:text-red-700"
-                          onClick={() => onDeleteInvite(inv.id)}
-                          type="button"
-                        >
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {invites.map((inv) => {
+                    const code = `${entryId}:${inv.id}`;
+                    return (
+                      <tr key={inv.id} className="border-t">
+                        <td className="py-2 pr-3 font-mono text-xs">{entryId}</td>
+                        <td className="py-2 pr-3 font-mono">{code}</td>
+                        <td className="py-2 pr-3">{inv.email}</td>
+                        <td className="py-2 pr-3">{inv.role}</td>
+                        <td className="py-2 pr-3">{inv.used ? "sí" : "no"}</td>
+                        <td className="py-2 pr-3 flex gap-2">
+                          <button
+                            className="rounded-lg border px-3 py-1 hover:bg-slate-50"
+                            onClick={() => onCopy(code)}
+                            type="button"
+                          >
+                            Copiar
+                          </button>
+                          <button
+                            className="rounded-lg border px-3 py-1 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => onDeleteInvite(inv.id)}
+                            type="button"
+                          >
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -611,7 +750,7 @@ export default function Members() {
           <div>
             <div className="text-lg font-semibold">Ingresar código de invitación</div>
             <div className="text-sm text-slate-600">
-              Pega aquí el código que te dio un admin para unirte a otra botella.
+              Pega aquí el código que te dio un admin para unirte a otra entrada.
             </div>
           </div>
 
@@ -625,10 +764,10 @@ export default function Members() {
         </div>
 
         {joinOpen && (
-          <form onSubmit={onJoinOtherBottle} className="mt-4 flex flex-col md:flex-row gap-3">
+          <form onSubmit={onJoinOtherEntry} className="mt-4 flex flex-col md:flex-row gap-3">
             <input
               className="flex-1 rounded-xl border px-3 py-2"
-              placeholder="Código (bottleId:inviteId)"
+              placeholder="Código (entradaId:inviteId)"
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value)}
             />

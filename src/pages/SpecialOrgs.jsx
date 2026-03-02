@@ -57,10 +57,34 @@ function Tile({ to, children }) {
   );
 }
 
+function SubTile({ to, children }) {
+  return (
+    <Link
+      to={to}
+      className="
+        group flex items-center justify-center text-center
+        h-16 md:h-18 rounded-[18px] px-6
+        shadow-[0_8px_18px_rgba(0,0,0,0.22)]
+        ring-1 ring-black/15 hover:shadow-[0_12px_22px_rgba(0,0,0,0.28)]
+        hover:-translate-y-0.5 transition
+      "
+      style={{ background: COLORS.tile, color: COLORS.tileText }}
+    >
+      <div
+        className="text-lg md:text-xl font-semibold tracking-wide"
+        style={{ fontFamily: '"Cinzel", Georgia, serif' }}
+      >
+        {children}
+      </div>
+    </Link>
+  );
+}
+
 export default function SpecialOrgs() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState([]); // list of orgId
+  const membersOrgId = allowed[0] || "iglesia";
 
   useEffect(() => {
     const unsub = onAuthStateChanged(getAuth(), (u) => {
@@ -178,6 +202,14 @@ export default function SpecialOrgs() {
                 {s.label}
               </Tile>
             ))}
+          </div>
+
+          <div className="flex justify-center mt-2 md:mt-4 pb-4">
+            <div className="w-full md:w-1/3 flex justify-center">
+              <div className="w-2/3">
+                <SubTile to={`/org/${membersOrgId}/members`}>Miembros</SubTile>
+              </div>
+            </div>
           </div>
 
           <Link

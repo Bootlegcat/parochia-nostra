@@ -135,14 +135,7 @@ export default function Home() {
             <Tile to={`/org/${orgId}/analytics`}>Análisis</Tile>
           </div>
 
-          {/* Botón "Miembros" debajo de Eventos */}
-          <div className="flex justify-center mt-2 md:mt-4 pb-12">
-            <div className="w-full md:w-1/3 flex justify-center">
-              <div className="w-2/3">
-                <SubTile to={`/org/${orgId}/members`}>Miembros</SubTile>
-              </div>
-            </div>
-          </div>
+          <div className="pb-12" />
 
           {/* ✅ Cambiar organización (ahora al selector real) */}
           <Link
