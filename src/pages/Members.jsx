@@ -173,6 +173,7 @@ export default function Members() {
       const baseIds = uSnap.exists() ? uSnap.data()?.bottleIds || [] : [];
 
       const ids = new Set(baseIds);
+      if (bottleId) ids.add(bottleId);
       for (const bid of SPECIAL_BOTTLES) {
         try {
           const mRef = doc(db, "botellas", bid, "members", user.uid);
@@ -184,16 +185,36 @@ export default function Members() {
       }
 
       const rows = [];
-      for (const id of ids) {
-        try {
-          const snap = await getDoc(doc(db, "botellas", id));
-          if (!snap.exists()) continue;
-          const data = snap.data() || {};
-          const bid = data?.entryId || (SPECIAL_BOTTLES.includes(id) ? SPECIAL_ENTRY_ID : "sin-entrada");
-          if (bid !== eId) continue;
-          rows.push({ id, name: data?.name || id });
-        } catch {
-          // ignore
+      if (eId === SPECIAL_ENTRY_ID) {
+        const fallbackRows = [
+          { id: "de-la-iglesia", name: "Iglesia" },
+          { id: "construyendo-lazos", name: "Construyendo Lazos" },
+        ];
+        rows.push(...fallbackRows);
+        for (const id of SPECIAL_BOTTLES) {
+          try {
+            const snap = await getDoc(doc(db, "botellas", id));
+            if (!snap.exists()) continue;
+            const data = snap.data() || {};
+            const idx = rows.findIndex((r) => r.id === id);
+            if (idx >= 0) rows[idx] = { id, name: data?.name || rows[idx].name };
+          } catch {
+            // ignore
+          }
+        }
+      } else {
+        for (const id of ids) {
+          try {
+            const snap = await getDoc(doc(db, "botellas", id));
+            if (!snap.exists()) continue;
+            const data = snap.data() || {};
+            const bid =
+              data?.entryId || (SPECIAL_BOTTLES.includes(id) ? SPECIAL_ENTRY_ID : "sin-entrada");
+            if (bid !== eId) continue;
+            rows.push({ id, name: data?.name || id });
+          } catch {
+            // ignore
+          }
         }
       }
 
