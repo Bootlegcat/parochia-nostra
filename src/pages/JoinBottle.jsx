@@ -65,9 +65,11 @@ export default function JoinBottle() {
         await setDoc(
           doc(db, "botellas", bid, "members", user.uid),
           {
-            role: "viewer",
+            role: inv.role && ["viewer", "editor", "admin"].includes(inv.role) ? inv.role : "viewer",
             email: normEmail(user.email),
             inviteId: parsed.inviteId,
+            entryId: parsed.entryId,
+            entryInviteId: parsed.inviteId,
             createdAt: serverTimestamp(),
           },
           { merge: true }

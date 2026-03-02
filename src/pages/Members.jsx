@@ -320,6 +320,8 @@ export default function Members() {
             role,
             email: normEmail(user.email),
             inviteId: parsed.inviteId,
+            entryId: parsed.entryId,
+            entryInviteId: parsed.inviteId,
             createdAt: serverTimestamp(),
           },
           { merge: true }
@@ -517,6 +519,8 @@ export default function Members() {
             role,
             email: normEmail(user.email),
             inviteId: parsed.inviteId,
+            entryId: parsed.entryId,
+            entryInviteId: parsed.inviteId,
             createdAt: serverTimestamp(),
           },
           { merge: true }

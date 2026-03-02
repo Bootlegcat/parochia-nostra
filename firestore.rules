@@ -39,6 +39,19 @@ service cloud.firestore {
         && (get(inviteByIdPath(bottleId, inviteId)).data.used != true);
     }
 
+    function entryInvitePath(entryId, inviteId) {
+      return /databases/$(database)/documents/entradas/$(entryId)/invites/$(inviteId);
+    }
+
+    function entryInviteTargetsMe(entryId, inviteId) {
+      return signedIn()
+        && request.auth.token.email != null
+        && exists(entryInvitePath(entryId, inviteId))
+        && normEmail(get(entryInvitePath(entryId, inviteId)).data.email)
+           == normEmail(request.auth.token.email)
+        && (get(entryInvitePath(entryId, inviteId)).data.used != true);
+    }
+
     // ---------- Botellas personales ----------
     function bottleDocPath(bottleId) {
       return /databases/$(database)/documents/botellas/$(bottleId);
@@ -184,6 +197,19 @@ service cloud.firestore {
             && request.resource.data.inviteId is string
             && inviteTargetsMe(bottleId, request.resource.data.inviteId)
             && request.resource.data.role == "viewer"
+            && request.resource.data.email is string
+            && normEmail(request.resource.data.email)
+               == normEmail(request.auth.token.email)
+          )
+          || (
+            signedIn()
+            && uid == request.auth.uid
+            && !exists(memberPath(bottleId, uid))
+            && request.auth.token.email != null
+            && request.resource.data.entryId is string
+            && request.resource.data.entryInviteId is string
+            && entryInviteTargetsMe(request.resource.data.entryId, request.resource.data.entryInviteId)
+            && request.resource.data.role in ["viewer", "editor", "admin"]
             && request.resource.data.email is string
             && normEmail(request.resource.data.email)
                == normEmail(request.auth.token.email)
