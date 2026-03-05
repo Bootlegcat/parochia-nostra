@@ -204,11 +204,14 @@ export default function SpecialOrgs() {
             ))}
           </div>
 
-          <div className="flex justify-center mt-2 md:mt-4 pb-4">
-            <div className="w-full md:w-1/3 flex justify-center">
-              <div className="w-2/3">
-                <SubTile to={`/org/${membersOrgId}/members`}>Miembros</SubTile>
-              </div>
+          <div className="flex justify-center mt-2 md:mt-4 pb-4 gap-4">
+            <div className="w-1/3">
+              <SubTile to={`/org/${membersOrgId}/members`}>Miembros</SubTile>
+            </div>
+            <div className="w-1/3">
+              <SubTile to={`/entry/parroquia-nuestra-senora-de-guadalupe/analytics`}>
+                Análisis General
+              </SubTile>
             </div>
           </div>
 

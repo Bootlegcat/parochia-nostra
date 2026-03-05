@@ -628,9 +628,9 @@ export default function Entries() {
   }, [authReady, roleReady, canEdit]);
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto px-4 md:px-6 py-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl md:text-3xl font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
+        <h1 className="text-2xl md:text-3xl font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
           Ingresos y Gastos
         </h1>
         <BackToHome />
@@ -648,12 +648,12 @@ export default function Entries() {
         </div>
       )}
 
-      <form onSubmit={onCreate} className="rounded-2xl border bg-white p-4 space-y-3 mb-4">
+      <form onSubmit={onCreate} className="rounded-2xl border bg-white p-4 space-y-3 mb-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Tipo</label>
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Tipo</label>
             <select
-              className="w-full rounded-xl border px-3 py-2"
+              className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               value={type}
               onChange={(e) => setType(e.target.value)}
               disabled={!canEdit}
@@ -665,11 +665,11 @@ export default function Entries() {
           </div>
 
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Monto</label>
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Monto</label>
             <input
               type="number"
               step="any"
-              className="w-full rounded-xl border px-3 py-2"
+              className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
@@ -679,10 +679,10 @@ export default function Entries() {
           </div>
 
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Fecha</label>
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Fecha</label>
             <input
               type="date"
-              className="w-full rounded-xl border px-3 py-2"
+              className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               value={date}
               onChange={(e) => setDate(e.target.value)}
               disabled={!canEdit}
@@ -691,11 +691,11 @@ export default function Entries() {
           </div>
 
           <div className="md:col-span-3">
-            <label className="block text-xs text-slate-500 mb-1">Cuenta bancaria</label>
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Cuenta bancaria</label>
 
             {bankAccounts.length > 0 ? (
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={bankAccountId}
                 onChange={(e) => setBankAccountId(e.target.value)}
                 disabled={!canEdit}
@@ -710,7 +710,7 @@ export default function Entries() {
               </select>
             ) : (
               <input
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={bankAccountText}
                 onChange={(e) => setBankAccountText(e.target.value)}
                 placeholder='Ej. "BANORTE 8686"'
@@ -724,9 +724,9 @@ export default function Entries() {
         {categoriesForType.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Categoría</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Categoría</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
                 disabled={!canEdit}
@@ -742,9 +742,9 @@ export default function Entries() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Sub-categoría</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Sub-categoría</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={subCategoryId}
                 onChange={(e) => setSubCategoryId(e.target.value)}
                 disabled={!categoryId || !canEdit}
@@ -760,9 +760,9 @@ export default function Entries() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Concepto</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Concepto</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={conceptId}
                 onChange={(e) => setConceptId(e.target.value)}
                 disabled={!subCategoryId || !canEdit}
@@ -780,20 +780,20 @@ export default function Entries() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Categoría</label>
-              <select className="w-full rounded-xl border px-3 py-2" disabled>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Categoría</label>
+              <select className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition" disabled>
                 <option>No hay categorías de {categoryType}</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Sub-categoría</label>
-              <select className="w-full rounded-xl border px-3 py-2" disabled>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Sub-categoría</label>
+              <select className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition" disabled>
                 <option>Selecciona una categoría</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Concepto</label>
-              <select className="w-full rounded-xl border px-3 py-2" disabled>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Concepto</label>
+              <select className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition" disabled>
                 <option>Selecciona una sub-categoría</option>
               </select>
             </div>
@@ -805,9 +805,9 @@ export default function Entries() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Forma de pago</label>
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Forma de pago</label>
             <select
-              className="w-full rounded-xl border px-3 py-2"
+              className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
               disabled={!canEdit}
@@ -822,9 +822,9 @@ export default function Entries() {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-xs text-slate-500 mb-1">Beneficiario / proveedor</label>
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Beneficiario / proveedor</label>
             <input
-              className="w-full rounded-xl border px-3 py-2"
+              className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               value={beneficiary}
               onChange={(e) => setBeneficiary(e.target.value)}
               placeholder='Ej. "Banorte" o "Sistemas y Equipos Ejecutivos, S.A."'
@@ -835,9 +835,9 @@ export default function Entries() {
         </div>
 
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Nota (opcional)</label>
+          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Nota (opcional)</label>
           <input
-            className="w-full rounded-xl border px-3 py-2"
+            className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Añade una nota…"
@@ -848,7 +848,8 @@ export default function Entries() {
 
         <div className="flex items-center gap-3">
           <button
-            className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
+            className="rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50"
+            style={{ background: '#4b2d22', color: '#d3b187', border: '1px solid rgba(211,177,135,0.35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
             disabled={saving || !orgId || !canEdit}
             title={!canEdit ? "Solo editor/administrador" : ""}
           >
@@ -858,7 +859,7 @@ export default function Entries() {
         </div>
       </form>
 
-      <div className="rounded-2xl border bg-white">
+      <div className="rounded-2xl border bg-white" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="px-4 py-3 border-b text-sm text-slate-500">Últimos movimientos</div>
 
         <ul className="divide-y">

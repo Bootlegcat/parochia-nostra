@@ -1202,7 +1202,7 @@ export default function Events() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl md:text-3xl font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
+        <h1 className="text-2xl md:text-3xl font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
           Categorías
         </h1>
         <BackToHome />
@@ -1212,7 +1212,7 @@ export default function Events() {
 
       {/* ===================== FILA 1: CATEGORÍAS ===================== */}
       <div className={"grid gap-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Categorías</h2>
 
           <div className="flex gap-2 mb-3">
@@ -1220,7 +1220,7 @@ export default function Events() {
               type="button"
               className={
                 "rounded-xl border px-3 py-1 text-sm " +
-                (catType === "ingreso" ? "bg-slate-900 text-white" : "hover:bg-slate-50")
+                (catType === "ingreso" ? "bg-slate-900 text-white" : "hover:bg-amber-50")
               }
               onClick={() => setCatType("ingreso")}
             >
@@ -1230,7 +1230,7 @@ export default function Events() {
               type="button"
               className={
                 "rounded-xl border px-3 py-1 text-sm " +
-                (catType === "egreso" ? "bg-slate-900 text-white" : "hover:bg-slate-50")
+                (catType === "egreso" ? "bg-slate-900 text-white" : "hover:bg-amber-50")
               }
               onClick={() => setCatType("egreso")}
             >
@@ -1240,14 +1240,14 @@ export default function Events() {
 
           <form onSubmit={onCreateCategory} className="flex gap-3 mb-4">
             <input
-              className="flex-1 rounded-xl border px-3 py-2"
+              className="flex-1 rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               placeholder="Nombre de la nueva categoría (ej. Ingresos, Egresos...)"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={!canEdit}
             />
             <button
-              className="rounded-xl bg-white text-[#111] border px-4 py-2 shadow-sm disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50" style={{ background: '#4b2d22', color: '#d3b187', border: '1px solid rgba(211,177,135,0.35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
               disabled={saving || !orgId || !canEdit}
               title={!canEdit ? "Solo editor/administrador" : ""}
             >
@@ -1282,14 +1282,14 @@ export default function Events() {
         </div>
 
         {showAnalytics && (
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Análisis de categorías</h2>
 
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs text-slate-500 mb-1">Categoría</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Categoría</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
                 disabled={!categoriesForType.length}
@@ -1303,7 +1303,7 @@ export default function Events() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Agrupar por</label>
               <select
                 className="rounded-xl border px-3 py-2"
                 value={groupCatBy}
@@ -1366,19 +1366,19 @@ export default function Events() {
 
       {/* ===================== FILA 2: SUB-CATEGORÍAS ===================== */}
       <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Sub-categorías</h2>
 
           <form onSubmit={onCreateSubCategory} className="flex gap-3 mb-4">
             <input
-              className="flex-1 rounded-xl border px-3 py-2"
+              className="flex-1 rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               placeholder="Nombre de la nueva sub-categoría (ej. Ofrendas, Luz, Agua...)"
               value={subName}
               onChange={(e) => setSubName(e.target.value)}
               disabled={!canEdit}
             />
             <button
-              className="rounded-xl bg-white text-[#111] border px-4 py-2 shadow-sm disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50" style={{ background: '#4b2d22', color: '#d3b187', border: '1px solid rgba(211,177,135,0.35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
               disabled={saving || !orgId || !canEdit}
               title={!canEdit ? "Solo editor/administrador" : ""}
             >
@@ -1387,9 +1387,9 @@ export default function Events() {
           </form>
 
           <div className="mb-3">
-            <label className="block text-xs text-slate-500 mb-1">Categoría</label>
+            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Categoría</label>
             <select
-              className="w-full rounded-xl border px-3 py-2"
+              className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               value={selectedCategoryId}
               onChange={(e) => setSelectedCategoryId(e.target.value)}
               disabled={!categoriesForType.length}
@@ -1429,14 +1429,14 @@ export default function Events() {
         </div>
 
         {showAnalytics && (
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Análisis de sub-categorías</h2>
 
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs text-slate-500 mb-1">Sub-categoría</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Sub-categoría</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedSubCategoryId}
                 onChange={(e) => setSelectedSubCategoryId(e.target.value)}
                 disabled={!subCategories.length}
@@ -1450,7 +1450,7 @@ export default function Events() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Agrupar por</label>
               <select
                 className="rounded-xl border px-3 py-2"
                 value={groupSubBy}
@@ -1511,19 +1511,19 @@ export default function Events() {
 
       {/* ===================== FILA 3: CONCEPTOS ===================== */}
       <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Conceptos</h2>
 
           <form onSubmit={onCreateConcept} className="flex gap-3 mb-4">
             <input
-              className="flex-1 rounded-xl border px-3 py-2"
+              className="flex-1 rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               placeholder='Nombre del nuevo concepto (ej. Transferencia, Efectivo...)'
               value={conceptName}
               onChange={(e) => setConceptName(e.target.value)}
               disabled={!canEdit}
             />
             <button
-              className="rounded-xl bg-white text-[#111] border px-4 py-2 shadow-sm disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50" style={{ background: '#4b2d22', color: '#d3b187', border: '1px solid rgba(211,177,135,0.35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
               disabled={saving || !orgId || !canEdit}
               title={!canEdit ? "Solo editor/administrador" : ""}
             >
@@ -1533,9 +1533,9 @@ export default function Events() {
 
           <div className="grid md:grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Categoría</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Categoría</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
                 disabled={!categoriesForType.length}
@@ -1549,9 +1549,9 @@ export default function Events() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Sub-categoría</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Sub-categoría</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedSubCategoryId}
                 onChange={(e) => setSelectedSubCategoryId(e.target.value)}
                 disabled={!subCategories.length}
@@ -1592,14 +1592,14 @@ export default function Events() {
         </div>
 
         {showAnalytics && (
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Análisis de conceptos</h2>
 
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs text-slate-500 mb-1">Concepto</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Concepto</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedConceptId}
                 onChange={(e) => setSelectedConceptId(e.target.value)}
                 disabled={!concepts.length}
@@ -1613,7 +1613,7 @@ export default function Events() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Agrupar por</label>
               <select
                 className="rounded-xl border px-3 py-2"
                 value={groupConceptBy}
@@ -1676,7 +1676,7 @@ export default function Events() {
 
       {/* ===================== FILA 4: CUENTAS BANCARIAS ===================== */}
       <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Cuentas bancarias</h2>
 
           <form
@@ -1710,14 +1710,14 @@ export default function Events() {
             className="flex gap-3 mb-4"
           >
             <input
-              className="flex-1 rounded-xl border px-3 py-2"
+              className="flex-1 rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               placeholder='Nombre de la cuenta (ej. "BANORTE 8686")'
               value={bankName}
               onChange={(e) => setBankName(e.target.value)}
               disabled={!canEdit}
             />
             <button
-              className="rounded-xl bg-white text-[#111] border px-4 py-2 shadow-sm disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50" style={{ background: '#4b2d22', color: '#d3b187', border: '1px solid rgba(211,177,135,0.35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
               disabled={saving || !orgId || !canEdit}
               title={!canEdit ? "Solo editor/administrador" : ""}
             >
@@ -1752,14 +1752,14 @@ export default function Events() {
         </div>
 
         {showAnalytics && (
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Análisis de cuentas bancarias</h2>
 
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs text-slate-500 mb-1">Cuenta bancaria</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Cuenta bancaria</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedBankAccountId}
                 onChange={(e) => setSelectedBankAccountId(e.target.value)}
                 disabled={!bankAccounts.length}
@@ -1773,7 +1773,7 @@ export default function Events() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Agrupar por</label>
               <select
                 className="rounded-xl border px-3 py-2"
                 value={groupBankBy}

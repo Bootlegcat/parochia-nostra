@@ -3,21 +3,22 @@ import { Link, useParams } from "react-router-dom";
 
 export default function BackToHome({ className = "", to }) {
   const { orgId } = useParams();
-  // Destino por defecto según contexto
   const href = to ?? (orgId ? `/org/${orgId}/home` : "/organizaciones");
 
   return (
     <Link
       to={href}
-      className={
-        "inline-flex items-center gap-2 rounded-2xl px-4 py-2 " +
-        "bg-white text-[#3b241b] border border-white shadow-sm " +
-        "hover:bg-white/90 " + className
-      }
+      className={"inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition hover:-translate-y-0.5 " + className}
+      style={{
+        background: "#fff",
+        color: "#3b241b",
+        border: "1px solid rgba(59,36,27,0.15)",
+        boxShadow: "0 2px 8px rgba(59,36,27,0.12)",
+      }}
       title="Volver al inicio"
       aria-label="Volver al inicio"
     >
-      <span aria-hidden>←</span>
+      <span aria-hidden style={{ fontSize: "0.9em" }}>←</span>
       <span>Volver al inicio</span>
     </Link>
   );

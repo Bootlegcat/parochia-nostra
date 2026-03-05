@@ -575,9 +575,9 @@ export default function Members() {
     error && !String(error).toLowerCase().includes("missing or insufficient permissions");
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-6">
+    <div className="max-w-4xl mx-auto px-4 md:px-6 py-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl md:text-3xl font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
+        <h1 className="text-2xl md:text-3xl font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
           Miembros
         </h1>
         <BackToHome to="/especiales" />
@@ -593,12 +593,12 @@ export default function Members() {
       {(showError || okMsg) && (
         <div className="mb-4">
           {showError && (
-            <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-red-800 mb-2">
+            <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-red-800 mb-2" style={{ border: '1px solid #fecaca', background: '#fef2f2' }}>
               {error}
             </div>
           )}
           {okMsg && (
-            <div className="rounded-xl bg-green-50 border border-green-200 p-3 text-green-800">
+            <div className="rounded-xl bg-green-50 border border-green-200 p-3 text-green-800" style={{ border: '1px solid #bbf7d0', background: '#f0fdf4' }}>
               {okMsg}
             </div>
           )}
@@ -606,7 +606,7 @@ export default function Members() {
       )}
 
       {/* BOTELLAS DE LA ENTRADA */}
-      <div className="rounded-2xl border bg-white p-5 mb-6">
+      <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="text-lg font-semibold">Botellas de la entrada</div>
         <div className="text-sm text-slate-600 mt-1">
           Entrada: <b>{entryName || "(sin nombre)"}</b> · ID: <b>{entryId || "(sin ID)"}</b>
@@ -617,7 +617,7 @@ export default function Members() {
             <button
               key={b.id}
               type="button"
-              className="rounded-xl border px-4 py-3 text-left hover:bg-slate-50"
+              className="rounded-xl border px-4 py-3 text-left hover:bg-amber-50/40"
               onClick={() => nav(`/org/${orgIdForBottleId(b.id)}/home`)}
             >
               <div className="font-semibold">{b.name}</div>
@@ -631,7 +631,7 @@ export default function Members() {
       </div>
 
       {/* TU ACCESO (igual que antes) */}
-      <div className="rounded-2xl border bg-white p-5 mb-6">
+      <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="text-lg font-semibold">Tu acceso</div>
         <div className="text-sm text-slate-600 mt-1">
           Rol: <b>{roleLabel(myRole)}</b> · Email: <b>{member?.email || user.email || "(sin email)"}</b>
@@ -652,18 +652,18 @@ export default function Members() {
 
       {/* ADMIN: invitar miembro (igual) */}
       {isAdmin && (
-        <div className="rounded-2xl border bg-white p-5 mb-6">
+        <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <div className="text-lg font-semibold mb-3">Invitar miembro</div>
           <form onSubmit={onCreateInvite} className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <input
-              className="md:col-span-3 rounded-xl border px-3 py-2"
+              className="md:col-span-3 rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               placeholder="email@ejemplo.com"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               disabled={adminBusy}
             />
             <select
-              className="rounded-xl border px-3 py-2"
+              className="rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value)}
               disabled={adminBusy}
@@ -673,7 +673,8 @@ export default function Members() {
               <option value="admin">Administrador</option>
             </select>
             <button
-              className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50"
+              style={{ background: '#4b2d22', color: '#d3b187', border: '1px solid rgba(211,177,135,0.35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
               disabled={adminBusy}
             >
               Crear invitación
@@ -687,22 +688,22 @@ export default function Members() {
 
       {/* ADMIN: invitaciones (igual) */}
       {isAdmin && (
-        <div className="rounded-2xl border bg-white p-5 mb-6">
+        <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <div className="text-lg font-semibold mb-3">Invitaciones</div>
           {invites.length === 0 ? (
             <div className="text-sm text-slate-600">No hay invitaciones.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
+                <thead style={{ background: 'rgba(59,36,27,0.05)' }}>
                   <tr className="text-left text-slate-500">
-                    <th className="py-2 pr-3">Entrada</th>
-                    <th className="py-2 pr-3">Código</th>
-                    <th className="py-2 pr-3">Email</th>
-                    <th className="py-2 pr-3">Rol</th>
-                    <th className="py-2 pr-3">Usado</th>
-                    <th className="py-2 pr-3">Usado por</th>
-                    <th className="py-2 pr-3">Acciones</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Entrada</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Código</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Email</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Rol</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Usado</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Usado por</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -718,7 +719,7 @@ export default function Members() {
                         <td className="py-2 pr-3">{inv.usedEmail || "—"}</td>
                         <td className="py-2 pr-3 flex gap-2">
                           <button
-                            className="rounded-lg border px-3 py-1 hover:bg-slate-50"
+                            className="rounded-lg border px-3 py-1 hover:bg-amber-50"
                             onClick={() => onCopy(code)}
                             type="button"
                           >
@@ -744,19 +745,19 @@ export default function Members() {
 
       {/* ADMIN: miembros (igual) */}
       {isAdmin && (
-        <div className="rounded-2xl border bg-white p-5 mb-6">
+        <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <div className="text-lg font-semibold mb-3">Miembros</div>
           {members.length === 0 ? (
             <div className="text-sm text-slate-600">No hay miembros.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
+                <thead style={{ background: 'rgba(59,36,27,0.05)' }}>
                   <tr className="text-left text-slate-500">
-                    <th className="py-2 pr-3">UID</th>
-                    <th className="py-2 pr-3">Email</th>
-                    <th className="py-2 pr-3">Rol</th>
-                    <th className="py-2 pr-3">Acciones</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">UID</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Email</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Rol</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -803,7 +804,7 @@ export default function Members() {
       )}
 
       {/* ✅ ÚNICO CAMBIO PEDIDO: botón abajo para ingresar código */}
-      <div className="rounded-2xl border bg-white p-5">
+      <div className="rounded-2xl border bg-white p-5" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-lg font-semibold">Ingresar código de invitación</div>
@@ -815,7 +816,7 @@ export default function Members() {
           <button
             type="button"
             onClick={() => setJoinOpen((v) => !v)}
-            className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-xl border px-4 py-2 text-sm hover:bg-amber-50"
           >
             {joinOpen ? "Cerrar" : "Ingresar código"}
           </button>
@@ -824,13 +825,14 @@ export default function Members() {
         {joinOpen && (
           <form onSubmit={onJoinOtherEntry} className="mt-4 flex flex-col md:flex-row gap-3">
             <input
-              className="flex-1 rounded-xl border px-3 py-2"
+              className="flex-1 rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               placeholder="Código (entradaId:inviteId)"
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value)}
             />
             <button
-              className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50"
+              style={{ background: '#4b2d22', color: '#d3b187', border: '1px solid rgba(211,177,135,0.35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
               disabled={joinBusy}
             >
               {joinBusy ? "Validando…" : "Unirme"}

@@ -399,7 +399,7 @@ function EntriesList({ list }) {
 
 function ChartCard({ title, children }) {
   return (
-    <div className="rounded-2xl border bg-white p-5 mb-6">
+    <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
       <div className="text-sm font-medium mb-3">{title}</div>
       <div className="h-72">{children}</div>
     </div>
@@ -485,7 +485,7 @@ function DropdownMultiSelect({
           <button
             type="button"
             onClick={() => onSelectAll?.()}
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-amber-50 disabled:opacity-50"
             disabled={!options.length}
           >
             Seleccionar todo
@@ -496,7 +496,7 @@ function DropdownMultiSelect({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full rounded-2xl border px-4 py-3 text-left flex items-center justify-between hover:bg-slate-50"
+        className="w-full rounded-2xl border px-4 py-3 text-left flex items-center justify-between hover:bg-amber-50"
       >
         <span className="text-slate-700">
           {values.length ? `${values.length} seleccionadas` : placeholder}
@@ -508,7 +508,7 @@ function DropdownMultiSelect({
         <div className="absolute z-20 mt-2 w-full rounded-2xl border bg-white shadow-lg p-3">
           <div className="flex items-center gap-2 mb-2">
             <input
-              className="w-full rounded-xl border px-3 py-2 text-sm"
+              className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
               placeholder="Buscar…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -516,7 +516,7 @@ function DropdownMultiSelect({
             <button
               type="button"
               onClick={() => onClear?.()}
-              className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+              className="rounded-xl border px-3 py-2 text-sm hover:bg-amber-50"
             >
               Limpiar
             </button>
@@ -526,7 +526,7 @@ function DropdownMultiSelect({
             {filtered.map((o) => (
               <label
                 key={o.id}
-                className="flex items-center gap-2 px-2 py-2 rounded-xl hover:bg-slate-50 cursor-pointer"
+                className="flex items-center gap-2 px-2 py-2 rounded-xl hover:bg-amber-50 cursor-pointer"
               >
                 <input
                   type="checkbox"
@@ -1168,15 +1168,15 @@ export default function Analytics() {
   const showMonthPicker = range === "week";
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl md:text-3xl font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
+        <h1 className="text-2xl md:text-3xl font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
           Análisis
         </h1>
         <BackToHome className="mb-0" />
       </div>
 
-      <div className="rounded-2xl border bg-white p-5 mb-6">
+      <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <div className="text-sm font-medium">Exportación Excel (Maestro)</div>
@@ -1189,7 +1189,7 @@ export default function Analytics() {
             type="button"
             onClick={onGenerateExcelMaster}
             disabled={excelBusy || !orgId}
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-amber-50 disabled:opacity-50"
           >
             {excelBusy ? "Actualizando…" : "Actualizar Excel Maestro"}
           </button>
@@ -1206,7 +1206,7 @@ export default function Analytics() {
                     href={excelLinks.masterUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                    className="inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm hover:bg-amber-50"
                   >
                     Descargar Maestro
                   </a>
@@ -1217,7 +1217,7 @@ export default function Analytics() {
         )}
       </div>
 
-      <div className="rounded-2xl border bg-white p-5 mb-6">
+      <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="text-base font-semibold text-slate-800">Filtros</div>
           <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -1230,7 +1230,7 @@ export default function Analytics() {
               type="button"
               onClick={() => loadCatalogs(true)}
               disabled={loadingCatalogs}
-              className="rounded-xl border px-3 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-xl border px-3 py-1 text-xs hover:bg-amber-50 disabled:opacity-50"
             >
               {loadingCatalogs ? "Actualizando…" : "Actualizar catálogos"}
             </button>
@@ -1356,7 +1356,7 @@ export default function Analytics() {
             <button
               type="button"
               onClick={onSelectAllGlobal}
-              className="rounded-2xl border px-5 py-3 text-lg hover:bg-slate-50"
+              className="rounded-2xl border px-5 py-3 text-lg hover:bg-amber-50"
               disabled={!categories.length && !availableSubs.length && !availableConcepts.length}
             >
               Seleccionar todo
@@ -1365,7 +1365,7 @@ export default function Analytics() {
             <button
               type="button"
               onClick={onClearAll}
-              className="rounded-2xl border px-5 py-3 text-lg hover:bg-slate-50"
+              className="rounded-2xl border px-5 py-3 text-lg hover:bg-amber-50"
             >
               Limpiar selección
             </button>
@@ -1391,7 +1391,7 @@ export default function Analytics() {
         <TimeSeriesChart data={porEvento} lines={clavesEvento} />
       </ChartCard>
 
-      <div className="rounded-2xl border bg-white p-5 mb-6">
+      <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="text-sm font-medium mb-3">Tabla (Ingreso / Gasto / Neto)</div>
 
         <div className="overflow-auto rounded-xl border" style={{ maxHeight: 420 }}>
@@ -1451,14 +1451,14 @@ export default function Analytics() {
       {showDetailedTables && (
         <>
           <div className="grid md:grid-cols-2 gap-6">
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Categorías</h2>
 
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs text-slate-500 mb-1">Categoría</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Categoría</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
                 disabled={!categories.length}
@@ -1472,9 +1472,9 @@ export default function Analytics() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Agrupar por</label>
               <select
-                className="rounded-xl border px-3 py-2"
+                className="rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={groupCatBy}
                 onChange={(e) => setGroupCatBy(e.target.value)}
               >
@@ -1532,14 +1532,14 @@ export default function Analytics() {
           </table>
         </div>
 
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Sub-categorías</h2>
 
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs text-slate-500 mb-1">Sub-categoría</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Sub-categoría</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedSubCategoryId}
                 onChange={(e) => setSelectedSubCategoryId(e.target.value)}
                 disabled={!subCategoriesForSelectedCategory.length}
@@ -1553,9 +1553,9 @@ export default function Analytics() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Agrupar por</label>
               <select
-                className="rounded-xl border px-3 py-2"
+                className="rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={groupSubBy}
                 onChange={(e) => setGroupSubBy(e.target.value)}
               >
@@ -1615,14 +1615,14 @@ export default function Analytics() {
       </div>
 
           <div className="grid md:grid-cols-2 gap-6 mt-6">
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Conceptos</h2>
 
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs text-slate-500 mb-1">Concepto</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Concepto</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedConceptId}
                 onChange={(e) => setSelectedConceptId(e.target.value)}
                 disabled={!conceptsForSelectedSub.length && !conceptsForSelectedCategory.length}
@@ -1636,9 +1636,9 @@ export default function Analytics() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Agrupar por</label>
               <select
-                className="rounded-xl border px-3 py-2"
+                className="rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={groupConceptBy}
                 onChange={(e) => setGroupConceptBy(e.target.value)}
               >
@@ -1696,14 +1696,14 @@ export default function Analytics() {
           </table>
         </div>
 
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Cuentas bancarias</h2>
 
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs text-slate-500 mb-1">Cuenta bancaria</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Cuenta bancaria</label>
               <select
-                className="w-full rounded-xl border px-3 py-2"
+                className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedBankAccountId}
                 onChange={(e) => setSelectedBankAccountId(e.target.value)}
                 disabled={!bankAccountsForSelectedCategory.length}
@@ -1717,9 +1717,9 @@ export default function Analytics() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Agrupar por</label>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Agrupar por</label>
               <select
-                className="rounded-xl border px-3 py-2"
+                className="rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={groupBankBy}
                 onChange={(e) => setGroupBankBy(e.target.value)}
               >

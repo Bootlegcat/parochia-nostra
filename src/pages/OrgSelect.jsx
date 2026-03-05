@@ -221,8 +221,10 @@ export default function OrgSelect() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: COLORS.page, color: "#fff" }}>
-        Cargando…
+      <div className="min-h-screen flex items-center justify-center" style={{ background: COLORS.page }}>
+        <div className="rounded-2xl px-8 py-5 text-sm font-medium" style={{ background: COLORS.tile, color: COLORS.tileText, border: "1px solid rgba(211,177,135,0.25)" }}>
+          Cargando…
+        </div>
       </div>
     );
   }
@@ -264,20 +266,23 @@ export default function OrgSelect() {
           </div>
 
           {createOpen && (
-            <div className="rounded-2xl border bg-white/95 p-5 mb-8">
-              <div className="text-lg font-semibold mb-3">Nueva entrada</div>
+            <div className="rounded-2xl p-5 mb-6" style={{ background: "rgba(255,255,255,0.96)", border: "1px solid rgba(59,36,27,0.12)", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-1 h-5 rounded-full inline-block" style={{ background: "#d3b187" }} />
+                <span className="text-sm font-semibold text-slate-700 tracking-wide uppercase">Nueva entrada</span>
+              </div>
 
-              <div className="text-sm mb-2 text-slate-600">Nombre de la entrada</div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Nombre de la entrada</label>
               <input
-                className="w-full rounded-xl border px-3 py-2 mb-4"
+                className="w-full rounded-xl border px-3 py-2.5 text-sm mb-4 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 placeholder="Ej. Parroquia San José"
                 value={entryName}
                 onChange={(e) => setEntryName(e.target.value)}
               />
 
-              <div className="text-sm mb-2 text-slate-600">Número de botellas</div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Número de botellas</label>
               <select
-                className="w-full rounded-xl border px-3 py-2 mb-4"
+                className="w-full rounded-xl border px-3 py-2.5 text-sm mb-4 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={bottleCount}
                 onChange={(e) => {
                   const n = Number(e.target.value);
@@ -290,35 +295,30 @@ export default function OrgSelect() {
                 }}
               >
                 {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
+                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
 
-              <div className="text-sm mb-2 text-slate-600">Nombres de botellas</div>
-              <div className="grid gap-2">
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Nombres de botellas</label>
+              <div className="grid gap-2 mb-4">
                 {Array.from({ length: bottleCount }).map((_, i) => (
                   <input
                     key={i}
-                    className="w-full rounded-xl border px-3 py-2"
+                    className="w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                     placeholder={`Botella ${i + 1}`}
                     value={bottleNames[i] || ""}
                     onChange={(e) => {
                       const v = e.target.value;
-                      setBottleNames((prev) => {
-                        const next = [...prev];
-                        next[i] = v;
-                        return next;
-                      });
+                      setBottleNames((prev) => { const next = [...prev]; next[i] = v; return next; });
                     }}
                   />
                 ))}
               </div>
 
-              <div className="mt-4 flex justify-end">
+              <div className="flex justify-end">
                 <button
-                  className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
+                  className="rounded-xl px-5 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50"
+                  style={{ background: "#4b2d22", color: "#d3b187", border: "1px solid rgba(211,177,135,0.35)", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}
                   onClick={onCreateBottle}
                   disabled={busyCreate}
                 >
@@ -328,36 +328,38 @@ export default function OrgSelect() {
             </div>
           )}
 
-          <div className="rounded-2xl border bg-white/95 p-5">
-            <div className="text-lg font-semibold mb-3">Seleccionar entrada</div>
+          <div className="rounded-2xl p-5" style={{ background: "rgba(255,255,255,0.96)", border: "1px solid rgba(59,36,27,0.12)", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-1 h-5 rounded-full inline-block" style={{ background: "#d3b187" }} />
+              <span className="text-sm font-semibold text-slate-700 tracking-wide uppercase">Seleccionar entrada</span>
+            </div>
             <div className="flex flex-col md:flex-row gap-3">
               <select
-                className="flex-1 rounded-xl border px-3 py-2"
+                className="flex-1 rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
                 value={selectedEntryId}
                 onChange={(e) => setSelectedEntryId(e.target.value)}
               >
                 <option value="">Selecciona entrada…</option>
                 {entries.map((en) => (
-                  <option key={en.id} value={en.id}>
-                    {en.name}
-                  </option>
+                  <option key={en.id} value={en.id}>{en.name}</option>
                 ))}
               </select>
               <button
-                className="rounded-xl bg-black text-white px-4 py-2 disabled:opacity-50"
+                className="rounded-xl px-5 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50"
+                style={{ background: "#4b2d22", color: "#d3b187", border: "1px solid rgba(211,177,135,0.35)", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}
                 onClick={onEnterBottle}
                 disabled={!selectedEntryId}
               >
                 Entrar
               </button>
             </div>
-            <div className="mt-4 text-sm text-slate-500">
+            <div className="mt-3 text-xs text-slate-500">
               Solo aparecen entradas/botellas a las que tu usuario tiene acceso.
             </div>
           </div>
 
           {error && (
-            <div className="mt-4 rounded-xl bg-red-50 border border-red-200 p-3 text-red-800">
+            <div className="mt-4 rounded-xl p-3 text-sm" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b" }}>
               {error}
             </div>
           )}

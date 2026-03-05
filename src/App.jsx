@@ -15,6 +15,7 @@ import Events from "./pages/Events.jsx";
 import Analytics from "./pages/Analytics.jsx";
 import Members from "./pages/Members.jsx";
 import MovimientosPage from "./pages/MovimientosPage.jsx";
+import EntryAnalytics from "./pages/EntryAnalytics.jsx";
 
 function RedirectToOrgSelect() {
   return <Navigate to="/organizaciones" replace />;
@@ -106,6 +107,16 @@ export default function App() {
               <OrgGate>
                 <Analytics />
               </OrgGate>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Análisis General de Entrada */}
+        <Route
+          path="/entry/:entryId/analytics"
+          element={
+            <ProtectedRoute>
+              <EntryAnalytics />
             </ProtectedRoute>
           }
         />
