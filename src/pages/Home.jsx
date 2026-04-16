@@ -1,7 +1,6 @@
 // src/pages/Home.jsx
 import { Link, Navigate, useParams } from "react-router-dom";
 import { useEffect, useMemo } from "react";
-import { getAuth, signOut } from "firebase/auth";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -80,7 +79,7 @@ function Tile({ to, children }) {
       to={to}
       className="
         group flex items-center justify-center text-center
-        h-56 md:h-64 rounded-[36px] px-10
+        h-40 md:h-52 rounded-[28px] px-8
         shadow-[0_10px_24px_rgba(0,0,0,0.25)]
         ring-1 ring-black/15 hover:shadow-[0_14px_28px_rgba(0,0,0,0.3)]
         hover:-translate-y-0.5 transition
@@ -88,7 +87,7 @@ function Tile({ to, children }) {
       style={{ background: COLORS.tile, color: COLORS.tileText }}
     >
       <div
-        className="text-3xl md:text-[38px] font-semibold leading-tight tracking-wide text-center"
+        className="text-2xl md:text-3xl font-semibold leading-tight tracking-wide text-center"
         style={{ fontFamily: '"Cinzel", Georgia, serif' }}
       >
         {children}
@@ -123,17 +122,8 @@ function SubTile({ to, children }) {
 }
 
 export default function Home() {
-  const auth = getAuth();
   const { orgId } = useParams(); // "iglesia" | "construyendo-lazos" | bottleId personal
   const bottleId = useMemo(() => (orgId ? BOTTLE_BY_ORG[orgId] || orgId : ""), [orgId]);
-
-  async function onLogout() {
-    try {
-      await signOut(auth);
-    } catch (e) {
-      alert(e?.message || String(e));
-    }
-  }
 
   useEffect(() => {
     let alive = true;
@@ -209,7 +199,7 @@ export default function Home() {
     <div className="min-h-screen p-4 md:p-6" style={{ background: COLORS.page }}>
       <div
         className="
-          relative mx-auto w-[96vw] max-w-[1500px]
+          relative mx-auto w-full
           rounded-[28px] overflow-hidden
           border-[12px] shadow-[0_20px_80px_rgba(0,0,0,0.35)]
         "
@@ -227,18 +217,18 @@ export default function Home() {
         <CornerImg className="absolute bottom-4 right-4 scale-x-[-1] scale-y-[-1]" />
 
         {/* Contenido */}
-        <div className="relative px-8 md:px-12 pt-10 md:pt-12 pb-20">
+        <div className="relative px-8 md:px-14 pt-8 md:pt-12 pb-20">
           {/* Escudo */}
-          <div className="flex justify-center mb-6 md:mb-10">
+          <div className="flex justify-center mb-4 md:mb-8">
             <img
               src={CREST_URL}
               alt="Escudo Parochia Nostra"
-              className="w-[220px] h-[220px] md:w-[320px] md:h-[320px] object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.35)]"
+              className="w-[160px] h-[160px] md:w-[220px] md:h-[220px] object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.35)]"
             />
           </div>
 
           {/* Botones grandes — EXACTAMENTE igual */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-12 pb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 pb-6">
             <Tile to={`/org/${orgId}/entries`}>
               <span className="block">
                 Ingresos &amp; <br className="hidden md:block" />
@@ -253,9 +243,9 @@ export default function Home() {
 
           <div className="pb-12" />
 
-          {/* ✅ Cambiar botella (más visible) */}
+          {/* Volver al Dashboard */}
           <Link
-            to="/especiales"
+            to="/dashboard"
             className="
               absolute left-4 bottom-3
               inline-flex items-center justify-center
@@ -265,21 +255,11 @@ export default function Home() {
               hover:-translate-y-0.5 transition
             "
             style={{ background: "#4b2d22", color: "#d3b187" }}
-            title="Cambiar botella"
+            title="Dashboard"
           >
-            Cambiar botella
+            ← Dashboard
           </Link>
 
-          {/* Cerrar sesión */}
-          <button
-            onClick={onLogout}
-            className="
-              absolute right-4 bottom-3 text-white font-medium text-sm
-              underline-offset-4 hover:underline transition
-            "
-          >
-            Cerrar sesión
-          </button>
         </div>
       </div>
     </div>

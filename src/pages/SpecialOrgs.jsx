@@ -1,11 +1,11 @@
 // src/pages/SpecialOrgs.jsx
 import { useEffect, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { useOrg } from "../context/OrgContext.jsx";
 
-// Rutas públicas (archivos en /public)
 const CREST_URL = "/crest.png";
 const BG_URL = "/parchment.jpg";
 const CORNER_URL = "/corner-ornate.png";
@@ -15,6 +15,9 @@ const COLORS = {
   tile: "#4b2d22",
   tileText: "#d3b187",
 };
+
+const SPECIAL_ENTRY_ID = "parroquia-nuestra-senora-de-guadalupe";
+const SPECIAL_ENTRY_NAME = "Parroquia Nuestra Señora de Guadalupe";
 
 const SPECIALS = [
   { orgId: "iglesia", bottleId: "de-la-iglesia", label: "Iglesia" },
@@ -27,20 +30,19 @@ function CornerImg({ className = "" }) {
       src={CORNER_URL}
       alt=""
       draggable={false}
-      className={
-        "w-40 md:w-48 h-auto opacity-95 pointer-events-none select-none " + className
-      }
+      className={"w-40 md:w-48 h-auto opacity-95 pointer-events-none select-none " + className}
     />
   );
 }
 
-function Tile({ to, children }) {
+function Tile({ label, onClick }) {
   return (
-    <Link
-      to={to}
+    <button
+      type="button"
+      onClick={onClick}
       className="
         group flex items-center justify-center text-center
-        h-56 md:h-64 rounded-[36px] px-10
+        h-56 md:h-64 rounded-[36px] px-10 w-full
         shadow-[0_10px_24px_rgba(0,0,0,0.25)]
         ring-1 ring-black/15 hover:shadow-[0_14px_28px_rgba(0,0,0,0.3)]
         hover:-translate-y-0.5 transition
@@ -51,9 +53,9 @@ function Tile({ to, children }) {
         className="text-3xl md:text-[38px] font-semibold leading-tight tracking-wide text-center"
         style={{ fontFamily: '"Cinzel", Georgia, serif' }}
       >
-        {children}
+        {label}
       </div>
-    </Link>
+    </button>
   );
 }
 
@@ -81,9 +83,13 @@ function SubTile({ to, children }) {
 }
 
 export default function SpecialOrgs() {
+  const nav = useNavigate();
+  const { setActive } = useOrg();
+
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [allowed, setAllowed] = useState([]); // list of orgId
+  const [allowed, setAllowed] = useState([]);
+
   const membersOrgId = allowed[0] || "iglesia";
 
   useEffect(() => {
@@ -106,47 +112,46 @@ export default function SpecialOrgs() {
       }
       if (alive) setAllowed(results);
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [user?.uid]);
 
+  function selectBottle(s) {
+    setActive({
+      bottleId: s.bottleId,
+      orgId: s.orgId,
+      bottleName: s.label,
+      entryId: SPECIAL_ENTRY_ID,
+      entryName: SPECIAL_ENTRY_NAME,
+      entryBottles: SPECIALS
+        .filter((sp) => allowed.includes(sp.orgId))
+        .map((sp) => ({ id: sp.bottleId, orgId: sp.orgId, name: sp.label })),
+    });
+    nav(`/org/${s.orgId}/home`);
+  }
+
   if (!user && !loading) return <Navigate to="/" replace />;
-  if (loading)
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: COLORS.page, color: "#fff" }}>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: COLORS.page }}>
+      <div className="rounded-2xl px-8 py-5 text-sm" style={{ background: COLORS.tile, color: COLORS.tileText, border: "1px solid rgba(211,177,135,0.25)" }}>
         Cargando…
       </div>
-    );
+    </div>
+  );
 
   if (!allowed.length) {
     return (
       <div className="min-h-screen p-4 md:p-6" style={{ background: COLORS.page }}>
         <div
-          className="
-            relative mx-auto w-[96vw] max-w-[1200px]
-            rounded-[28px] overflow-hidden
-            border-[12px] shadow-[0_20px_80px_rgba(0,0,0,0.35)]
-          "
-          style={{
-            borderColor: COLORS.page,
-            backgroundImage: `url(${BG_URL})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-          }}
+          className="relative mx-auto w-[96vw] max-w-[1200px] rounded-[28px] overflow-hidden border-[12px] shadow-[0_20px_80px_rgba(0,0,0,0.35)]"
+          style={{ borderColor: COLORS.page, backgroundImage: `url(${BG_URL})`, backgroundSize: "cover", backgroundPosition: "center" }}
         >
           <CornerImg className="absolute top-4 left-4" />
           <CornerImg className="absolute top-4 right-4 scale-x-[-1]" />
           <CornerImg className="absolute bottom-4 left-4 scale-y-[-1]" />
           <CornerImg className="absolute bottom-4 right-4 scale-x-[-1] scale-y-[-1]" />
-
           <div className="relative px-8 md:px-12 pt-10 md:pt-12 pb-20 text-center">
             <div className="flex justify-center mb-6 md:mb-10">
-              <img
-                src={CREST_URL}
-                alt="Escudo Parochia Nostra"
-                className="w-[220px] h-[220px] md:w-[320px] md:h-[320px] object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.35)]"
-              />
+              <img src={CREST_URL} alt="Escudo" className="w-[220px] h-[220px] md:w-[320px] md:h-[320px] object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.35)]" />
             </div>
             <div className="text-2xl mb-4" style={{ fontFamily: '"Cinzel", Georgia, serif', color: COLORS.tileText }}>
               Sin acceso a organizaciones especiales
@@ -155,11 +160,11 @@ export default function SpecialOrgs() {
               No tienes permisos para Iglesia o Construyendo Lazos.
             </div>
             <Link
-              to="/organizaciones"
-              className="inline-flex rounded-xl border border-[#d3b187]/40 px-4 py-2 text-sm hover:bg-[#5b3a2d]"
+              to="/dashboard"
+              className="inline-flex rounded-xl border border-[#d3b187]/40 px-4 py-2 text-sm hover:bg-[#5b3a2d] transition"
               style={{ color: COLORS.tileText }}
             >
-              Volver a inicio
+              ← Dashboard
             </Link>
           </div>
         </div>
@@ -170,17 +175,8 @@ export default function SpecialOrgs() {
   return (
     <div className="min-h-screen p-4 md:p-6" style={{ background: COLORS.page }}>
       <div
-        className="
-          relative mx-auto w-[96vw] max-w-[1500px]
-          rounded-[28px] overflow-hidden
-          border-[12px] shadow-[0_20px_80px_rgba(0,0,0,0.35)]
-        "
-        style={{
-          borderColor: COLORS.page,
-          backgroundImage: `url(${BG_URL})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
+        className="relative mx-auto w-[96vw] max-w-[1500px] rounded-[28px] overflow-hidden border-[12px] shadow-[0_20px_80px_rgba(0,0,0,0.35)]"
+        style={{ borderColor: COLORS.page, backgroundImage: `url(${BG_URL})`, backgroundSize: "cover", backgroundPosition: "center" }}
       >
         <CornerImg className="absolute top-4 left-4" />
         <CornerImg className="absolute top-4 right-4 scale-x-[-1]" />
@@ -198,9 +194,7 @@ export default function SpecialOrgs() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-12 pb-6">
             {SPECIALS.filter((s) => allowed.includes(s.orgId)).map((s) => (
-              <Tile key={s.orgId} to={`/org/${s.orgId}/home`}>
-                {s.label}
-              </Tile>
+              <Tile key={s.orgId} label={s.label} onClick={() => selectBottle(s)} />
             ))}
           </div>
 
@@ -209,14 +203,12 @@ export default function SpecialOrgs() {
               <SubTile to={`/org/${membersOrgId}/members`}>Miembros</SubTile>
             </div>
             <div className="w-1/3">
-              <SubTile to={`/entry/parroquia-nuestra-senora-de-guadalupe/analytics`}>
-                Análisis General
-              </SubTile>
+              <SubTile to={`/entry/${SPECIAL_ENTRY_ID}/analytics`}>Análisis General</SubTile>
             </div>
           </div>
 
           <Link
-            to="/organizaciones"
+            to="/dashboard"
             className="
               absolute left-4 bottom-3
               inline-flex items-center justify-center
@@ -226,9 +218,8 @@ export default function SpecialOrgs() {
               hover:-translate-y-0.5 transition
             "
             style={{ background: COLORS.tile, color: COLORS.tileText }}
-            title="Volver a inicio"
           >
-            Volver a inicio
+            ← Dashboard
           </Link>
         </div>
       </div>

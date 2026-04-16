@@ -1,15 +1,12 @@
 {
   "name": "Parochia Nostra",
   "short_name": "Parochia",
+  "description": "Gestión financiera parroquial",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#3b241b",
+  "theme_color": "#3b241b",
   "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    }
+    { "src": "/crest.png", "sizes": "any", "type": "image/png", "purpose": "any maskable" }
   ]
 }

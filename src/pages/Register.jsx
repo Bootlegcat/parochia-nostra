@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { auth } from "../firebase";
 import { createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { useNavigate, Link } from "react-router-dom";
+import { useToast } from "../components/Toast.jsx";
 
 const CREST_URL = "/crest.png";
 const C = { page: "#3b241b", tile: "#4b2d22", tileText: "#d3b187", border: "rgba(211,177,135,0.3)" };
@@ -9,19 +10,18 @@ const C = { page: "#3b241b", tile: "#4b2d22", tileText: "#d3b187", border: "rgba
 function Register() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]       = useState("");
   const [busy, setBusy]         = useState(false);
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    setError("");
     setBusy(true);
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       navigate("/dashboard");
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, "error");
     } finally {
       setBusy(false);
     }
@@ -69,12 +69,6 @@ function Register() {
                 required
               />
             </div>
-
-            {error && (
-              <div className="rounded-xl px-3 py-2 text-sm" style={{ background: "rgba(239,68,68,0.15)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.3)" }}>
-                {error}
-              </div>
-            )}
 
             <button
               type="submit"

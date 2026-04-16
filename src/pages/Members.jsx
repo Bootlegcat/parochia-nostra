@@ -1,6 +1,6 @@
 // src/pages/Members.jsx
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Link, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
@@ -19,6 +19,8 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import BackToHome from "../components/BackToHome";
+import { useToast } from "../components/Toast.jsx";
+import { useConfirm } from "../components/ConfirmModal.jsx";
 
 const BOTTLE_ID_BY_ORG = {
   iglesia: "de-la-iglesia",
@@ -60,6 +62,8 @@ function orgIdForBottleId(bottleId) {
 export default function Members() {
   const nav = useNavigate();
   const { orgId } = useParams();
+  const { showToast } = useToast();
+  const confirm = useConfirm();
 
   // ✅ mantener UI/flujo, pero hacer el user reactivo (evita nulls raros)
   const [user, setUser] = useState(() => getAuth().currentUser);
@@ -86,6 +90,7 @@ export default function Members() {
   const [loading, setLoading] = useState(true);
   const [member, setMember] = useState(null);
 
+
   // ✅ datos de entrada
   const [entryId, setEntryId] = useState("");
   const [entryName, setEntryName] = useState("");
@@ -108,8 +113,6 @@ export default function Members() {
   const [inviteRole, setInviteRole] = useState("viewer");
   const [adminBusy, setAdminBusy] = useState(false);
 
-  const [error, setError] = useState("");
-  const [okMsg, setOkMsg] = useState("");
 
   // ✅ rol con fallback para que NO salga vacío
   const myRole = member?.role || "viewer";
@@ -130,13 +133,11 @@ export default function Members() {
       return;
     }
     setLoading(true);
-    setError("");
-    setOkMsg("");
     try {
       const snap = await getDoc(refs.memberDoc);
       setMember(snap.exists() ? snap.data() : null);
     } catch (e) {
-      setError(e?.message || String(e));
+      showToast(e?.message || String(e), "error");
       setMember(null);
     } finally {
       setLoading(false);
@@ -228,7 +229,6 @@ export default function Members() {
     if (!refs || !isAdmin) return;
 
     setAdminBusy(true);
-    setError("");
     try {
       // members
       let mSnap;
@@ -252,7 +252,7 @@ export default function Members() {
     } catch (e) {
       const msg = e?.message || String(e);
       if (!msg.toLowerCase().includes("missing or insufficient permissions")) {
-        setError(msg);
+        showToast(msg, "error");
       }
     } finally {
       setAdminBusy(false);
@@ -276,13 +276,11 @@ export default function Members() {
 
   async function onClaimInvite(e) {
     e.preventDefault();
-    setError("");
-    setOkMsg("");
 
     const code = inviteCode.trim();
-    if (!code) return setError("Ingresa un código de invitación.");
-    if (!entryId) return setError("No se pudo resolver la entrada.");
-    if (!user?.email) return setError("Tu usuario no tiene email. Inicia sesión con email.");
+    if (!code) return showToast("Ingresa un código de invitación.", "error");
+    if (!entryId) return showToast("No se pudo resolver la entrada.", "error");
+    if (!user?.email) return showToast("Tu usuario no tiene email. Inicia sesión con email.", "error");
 
     try {
       setClaimBusy(true);
@@ -341,7 +339,7 @@ export default function Members() {
         { merge: true }
       );
 
-      setOkMsg("✅ Acceso concedido. Ya eres miembro de la entrada.");
+      showToast("✅ Acceso concedido. Ya eres miembro de la entrada.", "success");
       setInviteCode("");
       setShowClaim(false);
 
@@ -350,17 +348,20 @@ export default function Members() {
     } catch (e2) {
       const msg = e2?.message || String(e2);
       if (msg.toLowerCase().includes("no document to update")) {
-        setError(
-          "❌ Ese código no existe en esta entrada (o fue borrado). Pide al administrador que te copie el código exacto."
+        showToast(
+          "❌ Ese código no existe en esta entrada (o fue borrado). Pide al administrador que te copie el código exacto.",
+          "error"
         );
       } else if (msg.toLowerCase().includes("missing or insufficient permissions")) {
-        setError(
-          "❌ No tienes permiso para usar ese código. Revisa que el invite esté creado para TU email y que no esté usado."
+        showToast(
+          "❌ No tienes permiso para usar ese código. Revisa que el invite esté creado para TU email y que no esté usado.",
+          "error"
         );
       } else {
-        setError(
+        showToast(
           msg ||
-            "No se pudo usar el código. Verifica que sea correcto y que tu email coincida con el invite."
+            "No se pudo usar el código. Verifica que sea correcto y que tu email coincida con el invite.",
+          "error"
         );
       }
     } finally {
@@ -370,15 +371,13 @@ export default function Members() {
 
   async function onCreateInvite(e) {
     e.preventDefault();
-    setError("");
-    setOkMsg("");
 
-    if (!entryInviteRefs?.invitesCol) return setError("No se pudo resolver la entrada.");
-    if (!isAdmin) return setError("No tienes permisos.");
+    if (!entryInviteRefs?.invitesCol) return showToast("No se pudo resolver la entrada.", "error");
+    if (!isAdmin) return showToast("No tienes permisos.", "error");
 
     const email = normEmail(inviteEmail);
-    if (!email) return setError("Escribe un email.");
-    if (!ROLES.includes(inviteRole)) return setError("Rol inválido.");
+    if (!email) return showToast("Escribe un email.", "error");
+    if (!ROLES.includes(inviteRole)) return showToast("Rol inválido.", "error");
 
     try {
       setAdminBusy(true);
@@ -401,12 +400,12 @@ export default function Members() {
         createdByEmail: normEmail(user?.email || ""),
       });
 
-      setOkMsg(`✅ Invitación creada. Código: ${entryId}:${ref.id}`);
+      showToast(`✅ Invitación creada. Código: ${entryId}:${ref.id}`, "success");
       setInviteEmail("");
       setInviteRole("viewer");
       await loadAdminData();
     } catch (e2) {
-      setError(e2?.message || String(e2));
+      showToast(e2?.message || String(e2), "error");
     } finally {
       setAdminBusy(false);
     }
@@ -415,16 +414,13 @@ export default function Members() {
   async function onCopy(text) {
     try {
       await navigator.clipboard.writeText(text);
-      setOkMsg("📋 Copiado.");
-      setTimeout(() => setOkMsg(""), 1200);
+      showToast("📋 Copiado.", "success");
     } catch {
-      setOkMsg("No se pudo copiar (permiso del navegador).");
+      showToast("No se pudo copiar (permiso del navegador).", "info");
     }
   }
 
   async function onSetRole(memberUid, role) {
-    setError("");
-    setOkMsg("");
     if (!isAdmin) return;
     if (!ROLES.includes(role)) return;
     if (!bottleId) return;
@@ -432,52 +428,48 @@ export default function Members() {
     try {
       setAdminBusy(true);
       await updateDoc(doc(db, "botellas", bottleId, "members", memberUid), { role });
-      setOkMsg("✅ Rol actualizado.");
+      showToast("✅ Rol actualizado.", "success");
       await loadAdminData();
     } catch (e2) {
-      setError(e2?.message || String(e2));
+      showToast(e2?.message || String(e2), "error");
     } finally {
       setAdminBusy(false);
     }
   }
 
   async function onRemoveMember(memberUid) {
-    setError("");
-    setOkMsg("");
     if (!isAdmin) return;
     if (!bottleId) return;
 
-    const ok = window.confirm("¿Eliminar este miembro? Perderá acceso.");
+    const ok = await confirm("¿Eliminar este miembro? Perderá acceso.");
     if (!ok) return;
 
     try {
       setAdminBusy(true);
       await deleteDoc(doc(db, "botellas", bottleId, "members", memberUid));
-      setOkMsg("✅ Miembro eliminado.");
+      showToast("✅ Miembro eliminado.", "success");
       await loadAdminData();
     } catch (e2) {
-      setError(e2?.message || String(e2));
+      showToast(e2?.message || String(e2), "error");
     } finally {
       setAdminBusy(false);
     }
   }
 
   async function onDeleteInvite(inviteId) {
-    setError("");
-    setOkMsg("");
     if (!isAdmin) return;
     if (!entryInviteRefs?.inviteDoc) return;
 
-    const ok = window.confirm("¿Eliminar esta invitación?");
+    const ok = await confirm("¿Eliminar esta invitación?");
     if (!ok) return;
 
     try {
       setAdminBusy(true);
       await deleteDoc(entryInviteRefs.inviteDoc(inviteId));
-      setOkMsg("✅ Invitación eliminada.");
+      showToast("✅ Invitación eliminada.", "success");
       await loadAdminData();
     } catch (e2) {
-      setError(e2?.message || String(e2));
+      showToast(e2?.message || String(e2), "error");
     } finally {
       setAdminBusy(false);
     }
@@ -485,14 +477,12 @@ export default function Members() {
 
   async function onJoinOtherEntry(e) {
     e.preventDefault();
-    setError("");
-    setOkMsg("");
 
     const parsed = parseInviteCode(joinCode, "");
     if (!parsed.entryId || !parsed.inviteId) {
-      return setError("Código inválido. Usa formato: entradaId:inviteId");
+      return showToast("Código inválido. Usa formato: entradaId:inviteId", "error");
     }
-    if (!user?.uid || !user?.email) return setError("No hay sesión activa con email.");
+    if (!user?.uid || !user?.email) return showToast("No hay sesión activa con email.", "error");
 
     try {
       setJoinBusy(true);
@@ -544,11 +534,11 @@ export default function Members() {
         { merge: true }
       );
 
-      setOkMsg(`✅ Te uniste a la entrada: ${inv.entryName || parsed.entryId}.`);
+      showToast(`✅ Te uniste a la entrada: ${inv.entryName || parsed.entryId}.`, "success");
       setJoinCode("");
       setJoinOpen(false);
     } catch (e2) {
-      setError(e2?.message || String(e2));
+      showToast(e2?.message || String(e2), "error");
     } finally {
       setJoinBusy(false);
     }
@@ -563,51 +553,29 @@ export default function Members() {
     return (
       <div className="max-w-3xl mx-auto p-6">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-semibold">Miembros</h1>
-          <BackToHome />
+          <h1 className="text-3xl font-bold" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>Miembros</h1>
+          <BackToHome to="/dashboard" />
         </div>
-        <div className="rounded-xl border bg-white p-4">Cargando…</div>
+        <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.97)', border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 12px rgba(59,36,27,0.06)', color: 'rgba(59,36,27,0.6)' }}>Cargando…</div>
       </div>
     );
   }
 
-  const showError =
-    error && !String(error).toLowerCase().includes("missing or insufficient permissions");
-
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-6 py-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl md:text-3xl font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
+        <h1 className="text-3xl md:text-4xl font-bold" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
           Miembros
         </h1>
-        <BackToHome to="/especiales" />
+        <BackToHome to="/dashboard" />
       </div>
-
-      <div className="mb-3 flex items-center justify-between text-sm">
-        <Link className="text-white/90 underline underline-offset-4" to="/especiales">
-          Volver al inicio
-        </Link>
-        <span className="text-white/80">Org: {orgId}</span>
-      </div>
-
-      {(showError || okMsg) && (
-        <div className="mb-4">
-          {showError && (
-            <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-red-800 mb-2" style={{ border: '1px solid #fecaca', background: '#fef2f2' }}>
-              {error}
-            </div>
-          )}
-          {okMsg && (
-            <div className="rounded-xl bg-green-50 border border-green-200 p-3 text-green-800" style={{ border: '1px solid #bbf7d0', background: '#f0fdf4' }}>
-              {okMsg}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* BOTELLAS DE LA ENTRADA */}
       <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
-        <div className="text-lg font-semibold">Botellas de la entrada</div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+          <span className="text-sm font-bold tracking-wide uppercase" style={{ color: 'rgba(211,177,135,0.6)' }}>Botellas de la entrada</span>
+        </div>
         <div className="text-sm text-slate-600 mt-1">
           Entrada: <b>{entryName || "(sin nombre)"}</b> · ID: <b>{entryId || "(sin ID)"}</b>
         </div>
@@ -617,7 +585,8 @@ export default function Members() {
             <button
               key={b.id}
               type="button"
-              className="rounded-xl border px-4 py-3 text-left hover:bg-amber-50/40"
+              className="rounded-xl px-4 py-3 text-left hover:bg-amber-50/40"
+              style={{ background: 'rgba(211,177,135,0.06)', border: '1px solid rgba(211,177,135,0.2)' }}
               onClick={() => nav(`/org/${orgIdForBottleId(b.id)}/home`)}
             >
               <div className="font-semibold">{b.name}</div>
@@ -630,9 +599,12 @@ export default function Members() {
         </div>
       </div>
 
-      {/* TU ACCESO (igual que antes) */}
+      {/* TU ACCESO */}
       <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
-        <div className="text-lg font-semibold">Tu acceso</div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+          <span className="text-sm font-bold tracking-wide uppercase" style={{ color: 'rgba(211,177,135,0.6)' }}>Tu acceso</span>
+        </div>
         <div className="text-sm text-slate-600 mt-1">
           Rol: <b>{roleLabel(myRole)}</b> · Email: <b>{member?.email || user.email || "(sin email)"}</b>
         </div>
@@ -650,10 +622,13 @@ export default function Members() {
         )}
       </div>
 
-      {/* ADMIN: invitar miembro (igual) */}
+      {/* ADMIN: invitar miembro */}
       {isAdmin && (
         <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
-          <div className="text-lg font-semibold mb-3">Invitar miembro</div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+            <span className="text-sm font-bold tracking-wide uppercase" style={{ color: 'rgba(211,177,135,0.6)' }}>Invitar miembro</span>
+          </div>
           <form onSubmit={onCreateInvite} className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <input
               className="md:col-span-3 rounded-xl border px-3 py-2 focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
@@ -686,24 +661,27 @@ export default function Members() {
         </div>
       )}
 
-      {/* ADMIN: invitaciones (igual) */}
+      {/* ADMIN: invitaciones */}
       {isAdmin && (
         <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
-          <div className="text-lg font-semibold mb-3">Invitaciones</div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+            <span className="text-sm font-bold tracking-wide uppercase" style={{ color: 'rgba(211,177,135,0.6)' }}>Invitaciones</span>
+          </div>
           {invites.length === 0 ? (
             <div className="text-sm text-slate-600">No hay invitaciones.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead style={{ background: 'rgba(59,36,27,0.05)' }}>
-                  <tr className="text-left text-slate-500">
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Entrada</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Código</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Email</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Rol</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Usado</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Usado por</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Acciones</th>
+                <thead style={{ background: 'rgba(211,177,135,0.06)' }}>
+                  <tr className="text-left">
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Entrada</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Código</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Email</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Rol</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Usado</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Usado por</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -719,14 +697,14 @@ export default function Members() {
                         <td className="py-2 pr-3">{inv.usedEmail || "—"}</td>
                         <td className="py-2 pr-3 flex gap-2">
                           <button
-                            className="rounded-lg border px-3 py-1 hover:bg-amber-50"
+                            className="rounded-xl border px-3 py-1 hover:bg-amber-50"
                             onClick={() => onCopy(code)}
                             type="button"
                           >
                             Copiar
                           </button>
                           <button
-                            className="rounded-lg border px-3 py-1 hover:bg-red-50 hover:text-red-700"
+                            className="rounded-xl border px-3 py-1 hover:bg-red-50 hover:text-red-700"
                             onClick={() => onDeleteInvite(inv.id)}
                             type="button"
                           >
@@ -743,21 +721,24 @@ export default function Members() {
         </div>
       )}
 
-      {/* ADMIN: miembros (igual) */}
+      {/* ADMIN: miembros */}
       {isAdmin && (
         <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
-          <div className="text-lg font-semibold mb-3">Miembros</div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+            <span className="text-sm font-bold tracking-wide uppercase" style={{ color: 'rgba(211,177,135,0.6)' }}>Miembros</span>
+          </div>
           {members.length === 0 ? (
             <div className="text-sm text-slate-600">No hay miembros.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead style={{ background: 'rgba(59,36,27,0.05)' }}>
-                  <tr className="text-left text-slate-500">
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">UID</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Email</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Rol</th>
-                    <th className="py-2 pr-3 text-xs uppercase tracking-wide">Acciones</th>
+                <thead style={{ background: 'rgba(211,177,135,0.06)' }}>
+                  <tr className="text-left">
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>UID</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Email</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Rol</th>
+                    <th className="py-2 pr-3 text-xs uppercase tracking-wide" style={{ color: 'rgba(59,36,27,0.5)' }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -782,7 +763,7 @@ export default function Members() {
                           <span className="text-slate-500">(tú)</span>
                         ) : (
                           <button
-                            className="rounded-lg border px-3 py-1 hover:bg-red-50 hover:text-red-700"
+                            className="rounded-xl border px-3 py-1 hover:bg-red-50 hover:text-red-700"
                             onClick={() => onRemoveMember(m.id)}
                             disabled={adminBusy}
                             type="button"
@@ -803,11 +784,14 @@ export default function Members() {
         </div>
       )}
 
-      {/* ✅ ÚNICO CAMBIO PEDIDO: botón abajo para ingresar código */}
+      {/* Ingresar código de invitación */}
       <div className="rounded-2xl border bg-white p-5" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-lg font-semibold">Ingresar código de invitación</div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+              <span className="text-sm font-bold tracking-wide uppercase" style={{ color: 'rgba(211,177,135,0.6)' }}>Ingresar código de invitación</span>
+            </div>
             <div className="text-sm text-slate-600">
               Pega aquí el código que te dio un admin para unirte a otra entrada.
             </div>
@@ -816,7 +800,8 @@ export default function Members() {
           <button
             type="button"
             onClick={() => setJoinOpen((v) => !v)}
-            className="rounded-xl border px-4 py-2 text-sm hover:bg-amber-50"
+            className="rounded-xl px-4 py-2 text-sm"
+            style={{ background: 'rgba(211,177,135,0.08)', color: '#3b241b', border: '1px solid rgba(211,177,135,0.25)' }}
           >
             {joinOpen ? "Cerrar" : "Ingresar código"}
           </button>

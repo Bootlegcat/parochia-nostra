@@ -19,6 +19,8 @@ import {
 import { db } from "../firebase";
 import { useParams } from "react-router-dom";
 import BackToHome from "../components/BackToHome";
+import { useToast } from "../components/Toast.jsx";
+import { useConfirm } from "../components/ConfirmModal.jsx";
 
 /**
  * Mapping fijo (NO adivinanzas) para evitar mezclar botellas.
@@ -344,7 +346,8 @@ export default function Events() {
   const [busySubId, setBusySubId] = useState("");
   const [busyConceptId, setBusyConceptId] = useState("");
   const [busyBankId, setBusyBankId] = useState("");
-  const [error, setError] = useState("");
+  const { showToast } = useToast();
+  const confirm = useConfirm();
   const showAnalytics = false;
 
   useEffect(() => {
@@ -402,8 +405,6 @@ export default function Events() {
 
     setRole("viewer");
     setRoleReady(false);
-
-    setError("");
   }, [bottleId]);
 
   const orgRefs = useMemo(() => {
@@ -454,17 +455,16 @@ export default function Events() {
   async function resetMigration() {
     if (!orgRefs) return;
     if (!isAdmin) {
-      setError("No tienes permisos para resetear migración (solo administrador).");
+      showToast("No tienes permisos para resetear migración (solo administrador).", "error");
       return;
     }
 
-    const ok = window.confirm(
+    const ok = await confirm(
       "Esto borrará el flag meta/migration (done=true) para volver a correr el bootstrap. ¿Continuar?"
     );
     if (!ok) return;
 
     try {
-      setError("");
       await deleteDoc(orgRefs.metaMigrationDoc);
       setBootstrapInfo((s) => ({
         ...s,
@@ -475,7 +475,7 @@ export default function Events() {
       }));
       window.location.reload();
     } catch (e) {
-      setError(e?.message || String(e));
+      showToast(e?.message || String(e), "error");
     }
   }
 
@@ -881,7 +881,7 @@ export default function Events() {
         }
         await loadAllEntries(); // ✅ importante: cache global
       })
-      .catch((e) => setError(e?.message || String(e)));
+      .catch((e) => showToast(e?.message || String(e), "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgRefs, canEdit]);
 
@@ -1014,14 +1014,13 @@ export default function Events() {
     e.preventDefault();
 
     if (!canEdit) {
-      setError("No tienes permisos para crear categorías (solo editor/administrador).");
+      showToast("No tienes permisos para crear categorías (solo editor/administrador).", "error");
       return;
     }
 
     // ✅ FIX: no bloquear por recent-only si es admin/editor
-    setError("");
-    if (!orgRefs) return setError("No hay organización / bottleId / auth lista aún.");
-    if (!name.trim()) return setError("El nombre de la categoría es obligatorio.");
+    if (!orgRefs) return showToast("No hay organización / bottleId / auth lista aún.", "error");
+    if (!name.trim()) return showToast("El nombre de la categoría es obligatorio.", "error");
 
     try {
       setSaving(true);
@@ -1034,7 +1033,7 @@ export default function Events() {
       await loadCategories();
       setSelectedCategoryId(ref.id);
     } catch (err) {
-      setError(err?.message || String(err));
+      showToast(err?.message || String(err), "error");
     } finally {
       setSaving(false);
     }
@@ -1042,11 +1041,11 @@ export default function Events() {
 
   async function onDeleteCategory(cat) {
     if (!canEdit) {
-      setError("No tienes permisos para eliminar categorías (solo editor/administrador).");
+      showToast("No tienes permisos para eliminar categorías (solo editor/administrador).", "error");
       return;
     }
     if (!orgRefs || !cat?.id) return;
-    const ok = window.confirm(`¿Eliminar la categoría "${cat.name}"? (No borra entradas automáticamente)`);
+    const ok = await confirm(`¿Eliminar la categoría "${cat.name}"? (No borra entradas automáticamente)`);
     if (!ok) return;
 
     try {
@@ -1055,7 +1054,7 @@ export default function Events() {
       await loadCategories();
       if (selectedCategoryId === cat.id) setSelectedCategoryId("");
     } catch (err) {
-      setError(err?.message || String(err));
+      showToast(err?.message || String(err), "error");
     } finally {
       setBusyCatId("");
     }
@@ -1065,15 +1064,14 @@ export default function Events() {
     e.preventDefault();
 
     if (!canEdit) {
-      setError("No tienes permisos para crear sub-categorías (solo editor/administrador).");
+      showToast("No tienes permisos para crear sub-categorías (solo editor/administrador).", "error");
       return;
     }
 
     // ✅ FIX: no bloquear por recent-only si es admin/editor
-    setError("");
-    if (!orgRefs) return setError("No hay organización / bottleId / auth lista aún.");
-    if (!selectedCategoryId || selectedCategoryId === "__recent__") return setError("Selecciona primero una categoría.");
-    if (!subName.trim()) return setError("El nombre de la sub-categoría es obligatorio.");
+    if (!orgRefs) return showToast("No hay organización / bottleId / auth lista aún.", "error");
+    if (!selectedCategoryId || selectedCategoryId === "__recent__") return showToast("Selecciona primero una categoría.", "error");
+    if (!subName.trim()) return showToast("El nombre de la sub-categoría es obligatorio.", "error");
 
     try {
       setSaving(true);
@@ -1081,7 +1079,7 @@ export default function Events() {
       setSubName("");
       await loadSubCategories(selectedCategoryId);
     } catch (err) {
-      setError(err?.message || String(err));
+      showToast(err?.message || String(err), "error");
     } finally {
       setSaving(false);
     }
@@ -1089,11 +1087,11 @@ export default function Events() {
 
   async function onDeleteSubCategory(sc) {
     if (!canEdit) {
-      setError("No tienes permisos para eliminar sub-categorías (solo editor/administrador).");
+      showToast("No tienes permisos para eliminar sub-categorías (solo editor/administrador).", "error");
       return;
     }
     if (!orgRefs || !selectedCategoryId || selectedCategoryId === "__recent__" || !sc?.id) return;
-    const ok = window.confirm(`¿Eliminar la sub-categoría "${sc.name}"? (No borra entradas automáticamente)`);
+    const ok = await confirm(`¿Eliminar la sub-categoría "${sc.name}"? (No borra entradas automáticamente)`);
     if (!ok) return;
 
     try {
@@ -1102,7 +1100,7 @@ export default function Events() {
       await loadSubCategories(selectedCategoryId);
       if (selectedSubCategoryId === sc.id) setSelectedSubCategoryId("");
     } catch (err) {
-      setError(err?.message || String(err));
+      showToast(err?.message || String(err), "error");
     } finally {
       setBusySubId("");
     }
@@ -1112,16 +1110,15 @@ export default function Events() {
     e.preventDefault();
 
     if (!canEdit) {
-      setError("No tienes permisos para crear conceptos (solo editor/administrador).");
+      showToast("No tienes permisos para crear conceptos (solo editor/administrador).", "error");
       return;
     }
 
     // ✅ FIX: no bloquear por recent-only si es admin/editor
-    setError("");
-    if (!orgRefs) return setError("No hay organización / bottleId / auth lista aún.");
-    if (!selectedCategoryId || selectedCategoryId === "__recent__") return setError("Selecciona primero una categoría.");
-    if (!selectedSubCategoryId) return setError("Selecciona primero una sub-categoría.");
-    if (!conceptName.trim()) return setError("El nombre del concepto es obligatorio.");
+    if (!orgRefs) return showToast("No hay organización / bottleId / auth lista aún.", "error");
+    if (!selectedCategoryId || selectedCategoryId === "__recent__") return showToast("Selecciona primero una categoría.", "error");
+    if (!selectedSubCategoryId) return showToast("Selecciona primero una sub-categoría.", "error");
+    if (!conceptName.trim()) return showToast("El nombre del concepto es obligatorio.", "error");
 
     try {
       setSaving(true);
@@ -1132,7 +1129,7 @@ export default function Events() {
       setConceptName("");
       await loadConcepts(selectedCategoryId, selectedSubCategoryId);
     } catch (err) {
-      setError(err?.message || String(err));
+      showToast(err?.message || String(err), "error");
     } finally {
       setSaving(false);
     }
@@ -1140,11 +1137,11 @@ export default function Events() {
 
   async function onDeleteConcept(cn) {
     if (!canEdit) {
-      setError("No tienes permisos para eliminar conceptos (solo editor/administrador).");
+      showToast("No tienes permisos para eliminar conceptos (solo editor/administrador).", "error");
       return;
     }
     if (!orgRefs || !selectedCategoryId || selectedCategoryId === "__recent__" || !selectedSubCategoryId || !cn?.id) return;
-    const ok = window.confirm(`¿Eliminar el concepto "${cn.name}"? (No borra entradas automáticamente)`);
+    const ok = await confirm(`¿Eliminar el concepto "${cn.name}"? (No borra entradas automáticamente)`);
     if (!ok) return;
 
     try {
@@ -1153,7 +1150,7 @@ export default function Events() {
       await loadConcepts(selectedCategoryId, selectedSubCategoryId);
       if (selectedConceptId === cn.id) setSelectedConceptId("");
     } catch (err) {
-      setError(err?.message || String(err));
+      showToast(err?.message || String(err), "error");
     } finally {
       setBusyConceptId("");
     }
@@ -1161,11 +1158,11 @@ export default function Events() {
 
   async function onDeleteBankAccount(b) {
     if (!canEdit) {
-      setError("No tienes permisos para eliminar cuentas bancarias (solo editor/administrador).");
+      showToast("No tienes permisos para eliminar cuentas bancarias (solo editor/administrador).", "error");
       return;
     }
     if (!orgRefs || !b?.id) return;
-    const ok = window.confirm(`¿Eliminar la cuenta "${b.name}"?`);
+    const ok = await confirm(`¿Eliminar la cuenta "${b.name}"?`);
     if (!ok) return;
 
     try {
@@ -1174,7 +1171,7 @@ export default function Events() {
       await loadBankAccounts();
       if (selectedBankAccountId === b.id) setSelectedBankAccountId("");
     } catch (err) {
-      setError(err?.message || String(err));
+      showToast(err?.message || String(err), "error");
     } finally {
       setBusyBankId("");
     }
@@ -1200,17 +1197,19 @@ export default function Events() {
   const bankNameSelected = bankAccounts.find((b) => b.id === selectedBankAccountId)?.name || "—";
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl md:text-3xl font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
+    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl md:text-4xl font-bold" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
           Categorías
         </h1>
         <BackToHome />
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-
       {/* ===================== FILA 1: CATEGORÍAS ===================== */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Categorías</span>
+      </div>
       <div className={"grid gap-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
         <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Categorías</h2>
@@ -1365,7 +1364,11 @@ export default function Events() {
       </div>
 
       {/* ===================== FILA 2: SUB-CATEGORÍAS ===================== */}
-      <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
+      <div className="flex items-center gap-2 mt-6 mb-2">
+        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Sub-categorías</span>
+      </div>
+      <div className={"grid gap-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
         <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Sub-categorías</h2>
 
@@ -1510,7 +1513,11 @@ export default function Events() {
       </div>
 
       {/* ===================== FILA 3: CONCEPTOS ===================== */}
-      <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
+      <div className="flex items-center gap-2 mt-6 mb-2">
+        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Conceptos</span>
+      </div>
+      <div className={"grid gap-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
         <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Conceptos</h2>
 
@@ -1675,7 +1682,11 @@ export default function Events() {
       </div>
 
       {/* ===================== FILA 4: CUENTAS BANCARIAS ===================== */}
-      <div className={"grid gap-6 mt-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
+      <div className="flex items-center gap-2 mt-6 mb-2">
+        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Cuentas bancarias</span>
+      </div>
+      <div className={"grid gap-6 " + (showAnalytics ? "md:grid-cols-2" : "md:grid-cols-1")}>
         <div className="rounded-2xl border bg-white p-4" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
           <h2 className="text-lg font-semibold mb-3">Cuentas bancarias</h2>
 
@@ -1684,13 +1695,12 @@ export default function Events() {
               e.preventDefault();
 
               if (!canEdit) {
-                setError("No tienes permisos para crear cuentas bancarias (solo editor/administrador).");
+                showToast("No tienes permisos para crear cuentas bancarias (solo editor/administrador).", "error");
                 return;
               }
 
-              setError("");
-              if (!orgRefs) return setError("No hay organización / bottleId / auth lista aún.");
-              if (!bankName.trim()) return setError("El nombre de la cuenta es obligatorio.");
+              if (!orgRefs) return showToast("No hay organización / bottleId / auth lista aún.", "error");
+              if (!bankName.trim()) return showToast("El nombre de la cuenta es obligatorio.", "error");
 
               try {
                 setSaving(true);
@@ -1702,7 +1712,7 @@ export default function Events() {
                 await loadBankAccounts();
                 setSelectedBankAccountId(ref.id);
               } catch (err) {
-                setError(err?.message || String(err));
+                showToast(err?.message || String(err), "error");
               } finally {
                 setSaving(false);
               }

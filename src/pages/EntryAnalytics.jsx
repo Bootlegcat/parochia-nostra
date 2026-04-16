@@ -1,9 +1,10 @@
 // src/pages/EntryAnalytics.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { Link, useParams } from "react-router-dom";
+import { useToast } from "../components/Toast.jsx";
 import {
   ResponsiveContainer,
   LineChart,
@@ -143,7 +144,7 @@ function fmtMoney(n) {
 function normKey(s) {
   return String(s||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
-function normalizeMovimiento(docSnap, bottleId) {
+function normalizeMovimiento(docSnap, bottleId, idPrefix="") {
   const data=docSnap.data()||{};
   const raw=String(data.tipo||data.type||"").toLowerCase();
   const type=raw.includes("ing")||raw.includes("inc")?"income":"expense";
@@ -154,9 +155,9 @@ function normalizeMovimiento(docSnap, bottleId) {
     typeof data.amount==="number"?data.amount:
     Number(data.Monto||data.monto||data.amount||0);
   return {
-    id:`${bottleId}:${docSnap.id}`, bottleId, type, amount, date,
+    id:`${bottleId}:${idPrefix}${docSnap.id}`, bottleId, type, amount, date,
     createdAt:data.createdAt||null,
-    categoria:data.Categoría||data.categoria||"",
+    categoria:data.Categoría||data.categoria||data.category||"",
     categoryId:data.categoryId||"",
   };
 }
@@ -317,6 +318,7 @@ function DataTable({ columns, rows, emptyMsg="Sin datos." }) {
 /* ─── componente principal ─── */
 export default function EntryAnalytics() {
   const { entryId } = useParams();
+  const { showToast } = useToast();
   const [uid, setUid] = useState(null);
 
   const [bottleIds,    setBottleIds]    = useState([]);
@@ -333,7 +335,6 @@ export default function EntryAnalytics() {
   const [selectedYear, setSelectedYear] = useState(()=>String(new Date().getFullYear()));
   const [selectedMonth,setSelectedMonth]= useState(()=>String(new Date().getMonth()+1));
   const [viewByBottle, setViewByBottle] = useState(false);
-  const [error,        setError]        = useState("");
 
   useEffect(()=>{
     const unsub=onAuthStateChanged(getAuth(),u=>setUid(u?.uid||null));
@@ -373,7 +374,7 @@ export default function EntryAnalytics() {
         }
         if (!alive) return;
         setBottleIds(ids); setBottleNames(names); setEntryName(eName);
-      } catch(e) { if (alive) setError(e?.message||String(e)); }
+      } catch(e) { if (alive) showToast(e?.message||String(e), "error"); }
       finally    { if (alive) setLoadingBottles(false); }
     })();
     return ()=>{alive=false;};
@@ -384,15 +385,19 @@ export default function EntryAnalytics() {
     if (!uid||!bottleIds.length) return;
     let alive=true;
     (async()=>{
-      setLoadingMovs(true); setError("");
+      setLoadingMovs(true);
       try {
         const movsArrays=await Promise.all(
           bottleIds.map(async bid=>{
             try {
-              const snap=await getDocs(collection(db,"botellas",bid,"movimientos"));
-              return snap.docs
-                .map(d=>normalizeMovimiento(d,bid))
-                .filter(m=>m.date&&!isNaN(new Date(m.date).getTime()));
+              const [movSnap, entSnap] = await Promise.all([
+                getDocs(collection(db,"botellas",bid,"movimientos")),
+                getDocs(collection(db,"botellas",bid,"entries")),
+              ]);
+              return [
+                ...movSnap.docs.map(d=>normalizeMovimiento(d,bid,"m:")),
+                ...entSnap.docs.map(d=>normalizeMovimiento(d,bid,"e:")),
+              ].filter(m=>m.date&&!isNaN(new Date(m.date).getTime()));
             } catch { return []; }
           })
         );
@@ -417,7 +422,7 @@ export default function EntryAnalytics() {
 
         if (!alive) return;
         setAllEntries(allMovs); setMergedCats(merged);
-      } catch(e) { if (alive) setError(e?.message||String(e)); }
+      } catch(e) { if (alive) showToast(e?.message||String(e), "error"); }
       finally    { if (alive) setLoadingMovs(false); }
     })();
     return ()=>{alive=false;};
@@ -527,6 +532,144 @@ export default function EntryAnalytics() {
 
   function netoColor(n) { return n>=0?"#16a34a":"#dc2626"; }
 
+  /* ─── Export Excel ─── */
+  async function exportExcel() {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+
+    // Sheet 1: raw movimientos
+    const ws1 = wb.addWorksheet("Movimientos");
+    ws1.columns = [
+      { header: "Fecha",       key: "Fecha",       width: 14 },
+      { header: "Tipo",        key: "Tipo",         width: 10 },
+      { header: "Monto",       key: "Monto",        width: 14 },
+      { header: "Categoría",   key: "Categoria",    width: 20 },
+      { header: "Botella",     key: "Botella",      width: 18 },
+    ];
+    ws1.getRow(1).font = { bold: true };
+    for (const en of filteredEntries) {
+      const d = en.date instanceof Date ? en.date : (en.date?.toDate?.() ?? new Date(en.date ?? 0));
+      ws1.addRow({
+        Fecha:     isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-MX"),
+        Tipo:      en.type === "income" ? "Ingreso" : "Egreso",
+        Monto:     Number(en.amount || 0),
+        Categoria: en.categoria || "",
+        Botella:   bottleNames[en.bottleId] || en.bottleId,
+      });
+    }
+
+    // Sheet 2: por período
+    const ws2 = wb.addWorksheet("Por período");
+    ws2.columns = [
+      { header: "Período",  key: "Periodo",  width: 14 },
+      { header: "Ingresos", key: "Ingresos", width: 14 },
+      { header: "Gastos",   key: "Gastos",   width: 14 },
+      { header: "Neto",     key: "Neto",     width: 14 },
+    ];
+    ws2.getRow(1).font = { bold: true };
+    for (const r of tableRows) ws2.addRow({ Periodo: r.bucket, Ingresos: r.ingreso, Gastos: r.gasto, Neto: r.neto });
+
+    // Sheet 3: por botella
+    const ws3 = wb.addWorksheet("Por botella");
+    ws3.columns = [
+      { header: "Botella",  key: "Botella",  width: 20 },
+      { header: "Ingresos", key: "Ingresos", width: 14 },
+      { header: "Gastos",   key: "Gastos",   width: 14 },
+      { header: "Neto",     key: "Neto",     width: 14 },
+    ];
+    ws3.getRow(1).font = { bold: true };
+    for (const b of bottleSummary) ws3.addRow({ Botella: b.name, Ingresos: b.ingreso, Gastos: b.gasto, Neto: b.neto });
+
+    // Sheet 4: por categoría
+    const ws4 = wb.addWorksheet("Por categoría");
+    ws4.columns = [
+      { header: "Categoría", key: "Categoria", width: 22 },
+      { header: "Ingresos",  key: "Ingresos",  width: 14 },
+      { header: "Gastos",    key: "Gastos",    width: 14 },
+      { header: "Neto",      key: "Neto",      width: 14 },
+    ];
+    ws4.getRow(1).font = { bold: true };
+    for (const c of catSummary) ws4.addRow({ Categoria: c.name, Ingresos: c.ingreso, Gastos: c.gasto, Neto: c.neto });
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `analisis_${entryId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Excel exportado correctamente.", "success");
+  }
+
+  /* ─── Import Excel ─── */
+  const [showImport,       setShowImport]       = useState(false);
+  const [importRows,       setImportRows]       = useState([]);
+  const [importBusy,       setImportBusy]       = useState(false);
+  const [importTargetBottle, setImportTargetBottle] = useState("");
+
+  async function onFileImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const XLSX = await import("xlsx");
+    const buf = await file.arrayBuffer();
+    const wbParsed = XLSX.read(buf, { type: "array" });
+    const sheetName = wbParsed.SheetNames[0];
+    const raw = XLSX.utils.sheet_to_json(wbParsed.Sheets[sheetName], { defval: "" });
+    const parsed = raw.map((row) => {
+      const rawTipo = String(row["Tipo"] || row["tipo"] || row["Type"] || row["type"] || "").toLowerCase();
+      const type = rawTipo.includes("ing") || rawTipo.includes("inc") ? "income" : "expense";
+      const rawFecha = row["Fecha"] || row["fecha"] || row["Date"] || row["date"] || "";
+      let date = "";
+      if (typeof rawFecha === "number") {
+        // Excel serial date
+        const d = new Date(Math.round((rawFecha - 25569) * 86400 * 1000));
+        date = d.toISOString().slice(0, 10);
+      } else if (rawFecha) {
+        const d = new Date(rawFecha);
+        date = isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+      }
+      return {
+        type,
+        date,
+        amount:       Number(row["Monto"] || row["monto"] || row["Amount"] || row["amount"] || 0),
+        categoria:    String(row["Categoría"] || row["Categoria"] || row["categoria"] || row["Category"] || row["category"] || ""),
+        subcategoria: String(row["Subcategoría"] || row["Subcategoria"] || row["subcategoria"] || ""),
+        concepto:     String(row["Concepto"] || row["concepto"] || row["Concept"] || ""),
+        nota:         String(row["Nota"] || row["nota"] || row["Note"] || ""),
+      };
+    }).filter(r => r.amount > 0 && r.date);
+    setImportRows(parsed);
+    e.target.value = "";
+  }
+
+  async function onConfirmImport() {
+    const targetId = importTargetBottle || bottleIds[0];
+    if (!targetId) return showToast("Selecciona una botella destino.", "error");
+    setImportBusy(true);
+    try {
+      for (const row of importRows) {
+        await addDoc(collection(db, "botellas", targetId, "entries"), {
+          type:         row.type,
+          date:         row.date,
+          amount:       row.amount,
+          categoria:    row.categoria,
+          subcategoria: row.subcategoria,
+          concepto:     row.concepto,
+          nota:         row.nota,
+          createdAt:    serverTimestamp(),
+        });
+      }
+      showToast(`${importRows.length} registros importados correctamente.`, "success");
+      setImportRows([]);
+      setShowImport(false);
+    } catch(e) {
+      showToast(e?.message || String(e), "error");
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
   /* ─── render ─── */
   if (loadingBottles) {
     return (
@@ -554,11 +697,23 @@ export default function EntryAnalytics() {
             </p>
           )}
         </div>
-        <Link to="/especiales"
-          className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition hover:-translate-y-0.5"
-          style={{background:C.tile,color:C.tileText,border:`1px solid ${C.borderMd}`,boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}>
-          ← Volver
-        </Link>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={exportExcel}
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition hover:-translate-y-0.5"
+            style={{background:C.tile,color:C.tileText,border:`1px solid ${C.borderMd}`,boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}>
+            ↓ Excel
+          </button>
+          <button type="button" onClick={()=>setShowImport(v=>!v)}
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition hover:-translate-y-0.5"
+            style={{background:C.tile,color:C.tileText,border:`1px solid ${C.borderMd}`,boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}>
+            ↑ Importar
+          </button>
+          <Link to="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition hover:-translate-y-0.5"
+            style={{background:C.tile,color:C.tileText,border:`1px solid ${C.borderMd}`,boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}>
+            ← Volver
+          </Link>
+        </div>
       </div>
 
       {/* ── Botellas incluidas ── */}
@@ -577,10 +732,70 @@ export default function EntryAnalytics() {
         {!bottleIds.length&&<span className="text-sm" style={{color:C.tileText,opacity:0.5}}>Sin botellas.</span>}
       </div>
 
-      {/* ── Error ── */}
-      {error&&(
-        <div className="rounded-xl p-3 mb-4 text-sm" style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b"}}>
-          {error}
+      {/* ── Panel de importación ── */}
+      {showImport&&(
+        <div className="rounded-2xl p-5 mb-5" style={{background:"#fff",border:"1px solid rgba(59,36,27,0.10)",boxShadow:"0 2px 16px rgba(59,36,27,0.07)"}}>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-1 h-5 rounded-full inline-block" style={{background:C.tileText}} />
+            <span className="text-sm font-semibold text-slate-700 tracking-wide uppercase">Importar desde Excel</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Botella destino</label>
+              <select className="w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300 transition"
+                value={importTargetBottle||bottleIds[0]||""} onChange={e=>setImportTargetBottle(e.target.value)}>
+                {bottleIds.map(bid=>(
+                  <option key={bid} value={bid}>{bottleNames[bid]||bid}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Archivo .xlsx</label>
+              <input type="file" accept=".xlsx"
+                className="w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-amber-800 hover:file:bg-amber-100 transition cursor-pointer"
+                onChange={onFileImport} />
+              <p className="mt-1.5 text-xs text-slate-400">Columnas: Fecha, Tipo, Monto, Categoría, Subcategoría, Concepto, Nota</p>
+            </div>
+          </div>
+
+          {importRows.length>0&&(
+            <>
+              <p className="text-sm text-slate-600 mb-3">{importRows.length} filas detectadas — vista previa:</p>
+              <div className="overflow-auto rounded-xl border mb-4" style={{borderColor:"rgba(0,0,0,0.08)",maxHeight:240}}>
+                <table className="w-full text-xs min-w-max">
+                  <thead>
+                    <tr style={{background:"rgba(59,36,27,0.05)"}}>
+                      {["Fecha","Tipo","Monto","Categoría","Concepto"].map(h=>(
+                        <th key={h} className="py-2 px-3 text-left font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importRows.slice(0,10).map((r,i)=>(
+                      <tr key={i} className="border-t" style={{borderColor:"rgba(0,0,0,0.05)"}}>
+                        <td className="py-2 px-3 font-mono">{r.date}</td>
+                        <td className="py-2 px-3">{r.type==="income"?"Ingreso":"Egreso"}</td>
+                        <td className="py-2 px-3 text-right">${Number(r.amount).toLocaleString("es-MX")}</td>
+                        <td className="py-2 px-3">{r.categoria}</td>
+                        <td className="py-2 px-3">{r.concepto}</td>
+                      </tr>
+                    ))}
+                    {importRows.length>10&&(
+                      <tr><td colSpan={5} className="py-2 px-3 text-slate-400 text-center">+ {importRows.length-10} más</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end">
+                <button type="button" onClick={onConfirmImport} disabled={importBusy}
+                  className="rounded-xl px-5 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50"
+                  style={{background:"#4b2d22",color:"#d3b187",border:"1px solid rgba(211,177,135,0.35)",boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}>
+                  {importBusy?`Importando…`:`Importar ${importRows.length} registros`}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

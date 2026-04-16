@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { auth } from "../firebase";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { useNavigate, Link } from "react-router-dom";
+import { useState } from "react";
+import { useToast } from "../components/Toast.jsx";
 
 const CREST_URL = "/crest.png";
 const C = { page: "#3b241b", tile: "#4b2d22", tileText: "#d3b187", border: "rgba(211,177,135,0.3)" };
@@ -9,19 +11,18 @@ const C = { page: "#3b241b", tile: "#4b2d22", tileText: "#d3b187", border: "rgba
 function Login() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]       = useState("");
   const [busy, setBusy]         = useState(false);
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError("");
     setBusy(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
       navigate("/dashboard");
     } catch {
-      setError("Correo o contraseña incorrectos.");
+      showToast("Correo o contraseña incorrectos.", "error");
     } finally {
       setBusy(false);
     }
@@ -71,12 +72,6 @@ function Login() {
                 required
               />
             </div>
-
-            {error && (
-              <div className="rounded-xl px-3 py-2 text-sm" style={{ background: "rgba(239,68,68,0.15)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.3)" }}>
-                {error}
-              </div>
-            )}
 
             <button
               type="submit"

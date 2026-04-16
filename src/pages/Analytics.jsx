@@ -1,7 +1,7 @@
 // src/pages/Analytics.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { addDoc, collection, getDocs, orderBy, query, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "../firebase";
 import { useParams } from "react-router-dom";
 import {
@@ -15,6 +15,9 @@ import {
   Legend,
 } from "recharts";
 import BackToHome from "../components/BackToHome";
+import { useToast } from "../components/Toast.jsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { buildExcelMaestro } from "../utils/excelMaestro.js";
@@ -572,25 +575,27 @@ function normalizeMovimiento(docSnap) {
     date,
     createdAt: data.createdAt || null,
 
-    categoria: data.Categoría || data.categoria || "",
-    subcategoria: data.Subcategoría || data.subcategoria || "",
-    concepto: data.Concepto || data.concepto || "",
-    cuentaBancaria: data["Cuenta bancaria"] || data.cuentaBancaria || "",
+    categoria: data.Categoría || data.categoria || data.category || "",
+    subcategoria: data.Subcategoría || data.subcategoria || data.subCategory || "",
+    concepto: data.Concepto || data.concepto || data.concept || "",
+    cuentaBancaria: data["Cuenta bancaria"] || data.cuentaBancaria || data.bankAccount || "",
 
     categoryId: data.categoryId || "",
     subCategoryId: data.subCategoryId || "",
     conceptId: data.conceptId || "",
     bankAccountId: data.bankAccountId || "",
 
-    beneficiario: data["Referencia/Beneficiario"] || data.beneficiario || "",
-    referencia: data.referencia || "",
-    formaPago: data["Forma de pago"] || data.formaPago || data.formaDePago || "",
+    beneficiario: data["Referencia/Beneficiario"] || data.beneficiario || data.beneficiary || "",
+    referencia: data.referencia || data.reference || "",
+    formaPago: data["Forma de pago"] || data.formaPago || data.formaDePago || data.paymentMethod || "",
+    note: data.note || data.nota || "",
   };
 }
 
 /* ---------------- componente ---------------- */
 export default function Analytics() {
   const { orgId } = useParams();
+  const { showToast } = useToast();
   const [uid, setUid] = useState(null);
 
   const bottleId = useMemo(() => {
@@ -625,7 +630,6 @@ export default function Analytics() {
   const [selectedMonth, setSelectedMonth] = useState(() => String(new Date().getMonth() + 1));
 
   const [excelBusy, setExcelBusy] = useState(false);
-  const [excelMsg, setExcelMsg] = useState("");
   const [excelLinks, setExcelLinks] = useState(null);
   const [showDetailedTables, setShowDetailedTables] = useState(true);
   const [loadingCatalogs, setLoadingCatalogs] = useState(false);
@@ -741,16 +745,21 @@ export default function Analytics() {
     async function load() {
       if (!uid || !orgId || !bottleId) return;
 
-      // ======= movimientos: SIN orderBy("Fecha") (Iglesia puede no tenerlo) =======
+      // Load from both movimientos (legacy) and entries (new) collections
       try {
-        const movSnap = await getDocs(collection(db, "botellas", bottleId, "movimientos"));
-        const movs = movSnap.docs
-          .map(normalizeMovimiento)
+        const [movSnap, entSnap] = await Promise.all([
+          getDocs(collection(db, "botellas", bottleId, "movimientos")),
+          getDocs(collection(db, "botellas", bottleId, "entries")),
+        ]);
+        const movs = [
+          ...movSnap.docs.map(normalizeMovimiento),
+          ...entSnap.docs.map(normalizeMovimiento),
+        ]
           .filter((m) => m && m.date && !isNaN(new Date(m.date).getTime()))
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         setEntries(movs);
       } catch (e) {
-        console.error("Analytics movimientos error:", e);
+        console.error("Analytics load error:", e);
       }
 
       await loadCatalogs(false);
@@ -1097,13 +1106,12 @@ export default function Analytics() {
     const user = auth.currentUser;
 
     if (!user?.uid) {
-      setExcelMsg("❌ No hay sesión activa. Cierra sesión y vuelve a iniciar.");
+      showToast("No hay sesión activa. Cierra sesión y vuelve a iniciar.", "error");
       return;
     }
 
     try {
       setExcelBusy(true);
-      setExcelMsg("");
       setExcelLinks(null);
 
       await user.getIdToken(true);
@@ -1132,11 +1140,150 @@ export default function Analytics() {
       const url = await getDownloadURL(fileRef);
 
       setExcelLinks({ masterUrl: url, incomeUrl: "", expenseUrl: "" });
-      setExcelMsg("✅ Excel maestro actualizado. Ya puedes descargarlo.");
+      showToast("Excel maestro actualizado. Ya puedes descargarlo.", "success");
     } catch (err) {
-      setExcelMsg(`❌ Error al generar Excel: ${err?.message || String(err)}`);
+      showToast(`Error al generar Excel: ${err?.message || String(err)}`, "error");
     } finally {
       setExcelBusy(false);
+    }
+  }
+
+  /* ── Import state ── */
+  const [showImport, setShowImport] = useState(false);
+  const [importRows, setImportRows] = useState([]);
+  const [importBusy, setImportBusy] = useState(false);
+
+  /* ── Export helpers ── */
+  function exportPDF() {
+    const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const conceptNameById = new Map(concepts.map((c) => [c.id, c.name]));
+
+    function getName(kind, e) {
+      if (kind === "category") return categoryNameById.get(e.categoryId) || e.categoria || "—";
+      if (kind === "sub")      return subNameById.get(e.subCategoryId)   || e.subcategoria || "—";
+      if (kind === "concept")  return conceptNameById.get(e.conceptId)   || e.concepto || "—";
+      return e.cuentaBancaria || e.bankAccount || "—";
+    }
+
+    // Normalize dates (same as excelMaestro)
+    const normalized = entries.map((e) => {
+      let d = e.date;
+      if (d?.toDate) d = d.toDate();
+      else if (typeof d?.seconds === "number") d = new Date(d.seconds * 1000);
+      else d = new Date(d ?? 0);
+      return { ...e, __date: isNaN(d.getTime()) ? null : d };
+    }).filter((e) => e.__date);
+
+    // Group by YYYY-MM
+    const byMonth = new Map();
+    for (const e of normalized) {
+      const key = `${e.__date.getFullYear()}-${String(e.__date.getMonth()+1).padStart(2,"0")}`;
+      if (!byMonth.has(key)) byMonth.set(key, []);
+      byMonth.get(key).push(e);
+    }
+    const monthKeys = Array.from(byMonth.keys()).sort();
+
+    if (!monthKeys.length) { showToast("Sin datos para exportar.", "info"); return; }
+
+    const doc = new jsPDF({ orientation: "landscape" });
+    const head = [["Fecha","Descripción","Categoría","Subcategoría","Concepto","Cuenta","Forma de pago","Referencia/Benef.","Monto"]];
+    let firstSection = true;
+
+    for (const mk of monthKeys) {
+      const list = byMonth.get(mk);
+      const label = `${MONTHS_ES[list[0].__date.getMonth()]} ${list[0].__date.getFullYear()}`;
+
+      for (const [sectionLabel, filter] of [["Ingresos", "income"], ["Egresos", "expense"]]) {
+        const rows = list.filter((e) => e.type === filter).sort((a, b) => a.__date - b.__date);
+        if (!rows.length) continue;
+
+        if (!firstSection) doc.addPage();
+        firstSection = false;
+
+        doc.setFontSize(11);
+        doc.setTextColor(75, 45, 34);
+        doc.text(`${sectionLabel} — ${label}`, 14, 14);
+
+        const body = rows.map((e) => [
+          e.__date.toLocaleDateString("es-MX"),
+          e.referencia || e.beneficiario || "",
+          getName("category", e),
+          getName("sub", e),
+          getName("concept", e),
+          getName("bank", e),
+          e.formaPago || "",
+          e.beneficiario || e.referencia || "",
+          `$${Number(e.amount||0).toLocaleString("es-MX",{minimumFractionDigits:2})}`,
+        ]);
+        const total = rows.reduce((s, e) => s + Number(e.amount || 0), 0);
+        body.push(["","","","","","","","TOTAL", `$${total.toLocaleString("es-MX",{minimumFractionDigits:2})}`]);
+
+        autoTable(doc, {
+          head, body, startY: 20,
+          headStyles: { fillColor: [75,45,34], textColor: [211,177,135] },
+          styles: { fontSize: 7 },
+          columnStyles: { 8: { halign: "right" } },
+          didParseCell: (data) => {
+            if (data.row.index === body.length - 1) data.cell.styles.fontStyle = "bold";
+          },
+        });
+      }
+    }
+
+    doc.save(`analisis_${orgId}_${new Date().toISOString().slice(0,10)}.pdf`);
+    showToast("PDF exportado correctamente.", "success");
+  }
+
+  async function onFileImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await file.arrayBuffer();
+      const wbParsed = XLSX.read(buf, { type: "array" });
+      const raw = XLSX.utils.sheet_to_json(wbParsed.Sheets[wbParsed.SheetNames[0]], { defval: "" });
+      const rows = raw.map((r) => ({
+        date: (() => {
+          const v = r.Fecha ?? r.Date ?? r.fecha ?? r.date ?? "";
+          if (!v) return "";
+          if (typeof v === "number") return new Date(Math.round((v - 25569) * 86400 * 1000)).toISOString().slice(0, 10);
+          return String(v).slice(0, 10);
+        })(),
+        type:         String(r.Tipo ?? r.Type ?? r.tipo ?? r.type ?? "Egreso").toLowerCase().includes("ing") ? "income" : "expense",
+        amount:       Number(String(r.Monto ?? r.Amount ?? r.monto ?? r.amount ?? 0).replace(/,/g, "")) || 0,
+        categoria:    String(r["Categoría"] ?? r.Category ?? r.categoria ?? r.category ?? ""),
+        subcategoria: String(r["Subcategoría"] ?? r.subcategoria ?? r.subCategory ?? ""),
+        concepto:     String(r.Concepto ?? r.concepto ?? r.concept ?? ""),
+        note:         String(r.Nota ?? r.nota ?? r.Note ?? ""),
+      })).filter((r) => r.amount > 0);
+      setImportRows(rows);
+      e.target.value = "";
+    } catch (err) {
+      showToast(`Error al leer el archivo: ${err?.message || String(err)}`, "error");
+    }
+  }
+
+  async function onConfirmImport() {
+    if (!importRows.length || !bottleId) return;
+    try {
+      setImportBusy(true);
+      const entriesCol = collection(db, "botellas", bottleId, "entries");
+      for (const row of importRows) {
+        await addDoc(entriesCol, {
+          type: row.type, amount: row.amount,
+          date: row.date || new Date().toISOString().slice(0, 10),
+          dateKey: row.date || new Date().toISOString().slice(0, 10),
+          categoria: row.categoria, subcategoria: row.subcategoria, concepto: row.concepto,
+          note: row.note, createdAt: serverTimestamp(), source: { origin: "import" },
+        });
+      }
+      showToast(`${importRows.length} registros importados correctamente.`, "success");
+      setImportRows([]);
+      setShowImport(false);
+    } catch (err) {
+      showToast(err?.message || String(err), "error");
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -1170,53 +1317,98 @@ export default function Analytics() {
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl md:text-3xl font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
+        <h1 className="text-3xl md:text-4xl font-bold" style={{ fontFamily: '"Cinzel", Georgia, serif', color: '#d3b187' }}>
           Análisis
         </h1>
         <BackToHome className="mb-0" />
       </div>
 
+      {/* ── Exportación ── */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Exportación e Importación</span>
+      </div>
       <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <div className="text-sm font-medium">Exportación Excel (Maestro)</div>
-            <div className="text-xs text-slate-500">
-              Genera/actualiza el Excel maestro en la nube (con pestañas por mes) y lo deja listo para descargar.
-            </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={onGenerateExcelMaster}
-            disabled={excelBusy || !orgId}
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-amber-50 disabled:opacity-50"
-          >
-            {excelBusy ? "Actualizando…" : "Actualizar Excel Maestro"}
+        {/* botones rápidos */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          <button type="button" onClick={exportPDF} disabled={entries.length === 0}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5 disabled:opacity-40"
+            style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.2)' }}>
+            ↓ PDF
           </button>
+          <button type="button" onClick={() => setShowImport((v) => !v)}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5"
+            style={{ background: 'rgba(211,177,135,0.08)', color: '#d3b187', border: '1px solid rgba(211,177,135,0.2)' }}>
+            ↑ Importar Excel
+          </button>
+          <div className="w-px h-4 self-center" style={{ background: 'rgba(59,36,27,0.12)' }} />
+          <button type="button" onClick={onGenerateExcelMaster} disabled={excelBusy || !orgId}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5 disabled:opacity-50"
+            style={{ background: 'rgba(59,36,27,0.06)', color: '#64748b', border: '1px solid rgba(59,36,27,0.12)' }}>
+            {excelBusy ? "Actualizando…" : "↑ Excel Maestro (nube)"}
+          </button>
+          {excelLinks?.masterUrl && (
+            <a href={excelLinks.masterUrl} target="_blank" rel="noreferrer"
+              className="rounded-xl px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5"
+              style={{ background: 'rgba(37,99,235,0.08)', color: '#2563eb', border: '1px solid rgba(37,99,235,0.2)' }}>
+              ↓ Descargar Maestro
+            </a>
+          )}
         </div>
 
-        {(excelMsg || excelLinks) && (
-          <div className="mt-3 text-sm">
-            {excelMsg && <div className="mb-2">{excelMsg}</div>}
-
-            {excelLinks && (
-              <div className="flex flex-col md:flex-row gap-2">
-                {excelLinks.masterUrl ? (
-                  <a
-                    href={excelLinks.masterUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm hover:bg-amber-50"
-                  >
-                    Descargar Maestro
-                  </a>
-                ) : null}
-              </div>
+        {/* panel importar */}
+        {showImport && (
+          <div className="rounded-xl border p-4 mt-1" style={{ borderColor: 'rgba(59,36,27,0.10)', background: 'rgba(59,36,27,0.02)' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Importar desde Excel</span>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">Columnas: Fecha, Tipo (Ingreso/Egreso), Monto, Categoría, Subcategoría, Concepto, Nota</p>
+            <input type="file" accept=".xlsx" onChange={onFileImport}
+              className="block text-sm text-slate-600 mb-3 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-amber-800 hover:file:bg-amber-100 cursor-pointer" />
+            {importRows.length > 0 && (
+              <>
+                <div className="overflow-x-auto mb-3">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left border-b">
+                        {["Fecha","Tipo","Monto","Categoría","Nota"].map((h) => (
+                          <th key={h} className="py-1 pr-3 text-slate-400 uppercase tracking-wide">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.slice(0, 10).map((r, i) => (
+                        <tr key={i} className="border-b">
+                          <td className="py-1 pr-3">{r.date}</td>
+                          <td className="py-1 pr-3" style={{ color: r.type === "income" ? "#16a34a" : "#dc2626" }}>
+                            {r.type === "income" ? "Ingreso" : "Egreso"}
+                          </td>
+                          <td className="py-1 pr-3">{Number(r.amount).toLocaleString("es-MX")}</td>
+                          <td className="py-1 pr-3">{r.categoria}</td>
+                          <td className="py-1">{r.note}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {importRows.length > 10 && <p className="text-xs text-slate-400 mt-1">+ {importRows.length - 10} más filas</p>}
+                </div>
+                <button type="button" onClick={onConfirmImport} disabled={importBusy}
+                  className="rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:opacity-50"
+                  style={{ background: '#4b2d22', color: '#d3b187', border: '1px solid rgba(211,177,135,0.35)' }}>
+                  {importBusy ? "Importando…" : `Importar ${importRows.length} registros`}
+                </button>
+              </>
             )}
           </div>
         )}
       </div>
 
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Filtros</span>
+      </div>
       <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="text-base font-semibold text-slate-800">Filtros</div>
@@ -1373,7 +1565,10 @@ export default function Analytics() {
         </div>
       </div>
 
-      <div className="mb-4 text-base font-semibold text-white/90">Gráficas</div>
+      <div className="flex items-center gap-2 mb-4">
+        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Gráficas</span>
+      </div>
 
       <ChartCard title="Seleccionados — Ingreso vs Gasto">
         <TimeSeriesChart
@@ -1391,6 +1586,10 @@ export default function Analytics() {
         <TimeSeriesChart data={porEvento} lines={clavesEvento} />
       </ChartCard>
 
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: '#d3b187' }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: 'rgba(211,177,135,0.5)' }}>Tabla</span>
+      </div>
       <div className="rounded-2xl border bg-white p-5 mb-6" style={{ border: '1px solid rgba(59,36,27,0.10)', boxShadow: '0 2px 16px rgba(59,36,27,0.07)' }}>
         <div className="text-sm font-medium mb-3">Tabla (Ingreso / Gasto / Neto)</div>
 

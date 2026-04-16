@@ -4,9 +4,9 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db } from "../firebase";
+import { useToast } from "../components/Toast.jsx";
 
-const CREST_URL = "/crest.png";
-const C = { page: "#3b241b", tile: "#4b2d22", tileText: "#d3b187", border: "rgba(211,177,135,0.3)" };
+const C ={ page: "#3b241b", tile: "#4b2d22", tileText: "#d3b187", border: "rgba(211,177,135,0.3)" };
 
 function normEmail(s) { return String(s || "").trim().toLowerCase(); }
 
@@ -19,12 +19,11 @@ function parseInviteCode(raw) {
 
 export default function JoinBottle() {
   const nav = useNavigate();
+  const { showToast } = useToast();
   const [user, setUser]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [code, setCode]     = useState("");
   const [busy, setBusy]     = useState(false);
-  const [error, setError]   = useState("");
-  const [ok, setOk]         = useState("");
 
   useEffect(() => {
     const unsub = onAuthStateChanged(getAuth(), (u) => { setUser(u || null); setLoading(false); });
@@ -33,10 +32,9 @@ export default function JoinBottle() {
 
   async function onJoin(e) {
     e.preventDefault();
-    setError(""); setOk("");
     const parsed = parseInviteCode(code);
-    if (!parsed.entryId || !parsed.inviteId) return setError("Código inválido. Usa formato: entradaId:inviteId");
-    if (!user?.uid || !user?.email) return setError("No hay sesión activa con email.");
+    if (!parsed.entryId || !parsed.inviteId) return showToast("Código inválido. Usa formato: entradaId:inviteId", "error");
+    if (!user?.uid || !user?.email) return showToast("No hay sesión activa con email.", "error");
 
     try {
       setBusy(true);
@@ -62,11 +60,11 @@ export default function JoinBottle() {
       await updateDoc(inviteRef, { used: true });
       await setDoc(doc(db, "users", user.uid), { bottleIds: arrayUnion(...bottleIds) }, { merge: true });
 
-      setOk("Acceso concedido. Redirigiendo…");
+      showToast("Acceso concedido. Redirigiendo…", "success");
       setCode("");
-      setTimeout(() => nav("/organizaciones"), 800);
+      setTimeout(() => nav("/dashboard"), 800);
     } catch (e2) {
-      setError(e2?.message || String(e2));
+      showToast(e2?.message || String(e2), "error");
     } finally {
       setBusy(false);
     }
@@ -74,19 +72,11 @@ export default function JoinBottle() {
 
   if (!user && !loading) return <Navigate to="/" replace />;
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: C.page }}>
-      <div className="rounded-2xl px-8 py-5 text-sm" style={{ background: C.tile, color: C.tileText, border: `1px solid ${C.border}` }}>Cargando…</div>
-    </div>
+    <div className="max-w-lg mx-auto px-4 py-16 text-center text-sm" style={{ color: '#d3b187' }}>Cargando…</div>
   );
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: C.page }}>
-      <div className="w-full max-w-lg">
-        {/* Escudo */}
-        <div className="flex justify-center mb-6">
-          <img src={CREST_URL} alt="Parochia Nostra" className="w-24 h-24 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)]" />
-        </div>
-
+    <div className="max-w-lg mx-auto px-4 py-16">
         {/* Card */}
         <div className="rounded-3xl p-8" style={{ background: C.tile, border: `1px solid ${C.border}`, boxShadow: "0 8px 40px rgba(0,0,0,0.35)" }}>
           <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: '"Cinzel", Georgia, serif', color: C.tileText }}>
@@ -112,21 +102,10 @@ export default function JoinBottle() {
             </button>
           </form>
 
-          {error && (
-            <div className="mt-4 rounded-xl px-3 py-2 text-sm" style={{ background: "rgba(239,68,68,0.15)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.3)" }}>
-              {error}
-            </div>
-          )}
-          {ok && (
-            <div className="mt-4 rounded-xl px-3 py-2 text-sm" style={{ background: "rgba(74,222,128,0.15)", color: "#86efac", border: "1px solid rgba(74,222,128,0.3)" }}>
-              {ok}
-            </div>
-          )}
-
           <div className="mt-6">
             <button
               type="button"
-              onClick={() => nav("/organizaciones")}
+              onClick={() => nav("/dashboard")}
               className="text-xs underline underline-offset-4 transition"
               style={{ color: "rgba(211,177,135,0.6)" }}
             >
@@ -134,7 +113,6 @@ export default function JoinBottle() {
             </button>
           </div>
         </div>
-      </div>
     </div>
   );
 }
